@@ -1,0 +1,52 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
+
+class Player extends Model
+{
+    protected $fillable = [
+        'game_id', 'name', 'role', 'is_alive',
+        'token', 'night_vote_target_id', 'day_vote_target_id', 'has_peeked',
+    ];
+
+    protected $casts = [
+        'is_alive'   => 'boolean',
+        'has_peeked' => 'boolean',
+    ];
+
+    public function game(): BelongsTo
+    {
+        return $this->belongsTo(Game::class);
+    }
+
+    public function getRoleIconAttribute(): string
+    {
+        return match ($this->role) {
+            'Werewolf' => '🐺',
+            'Seer'     => '🔮',
+            'Doctor'   => '💊',
+            'Villager' => '👨‍🌾',
+            default    => '❓',
+        };
+    }
+
+    /**
+     * Generate and save a unique secret token for this player.
+     */
+    public function generateToken(): void
+    {
+        $this->update(['token' => Str::random(32)]);
+    }
+
+    /**
+     * URL the player uses to see their secret role.
+     */
+    public function roleRevealUrl(): string
+    {
+        return route('games.role-reveal', ['game' => $this->game_id, 'token' => $this->token]);
+    }
+}

@@ -1,49 +1,111 @@
 @extends('layouts.app')
+
 @section('title', 'Games')
+
 @section('content')
 <style>
-    .page-header { display:flex; align-items:center; margin-bottom:1.5rem; gap:1rem; flex-wrap:wrap; }
-    .page-header h1 { flex:1; }
-    .game-row { display:flex; align-items:center; gap:1rem; padding:.9rem 1.2rem;
-                background:var(--surface2); border-radius:var(--radius-sm); margin-bottom:.6rem;
-                box-shadow:0 2px 8px rgba(0,0,0,.2); transition:background .15s; }
-    .game-row:hover { background:#5a5a5a; }
-    .game-name { font-weight:800; font-size:1rem; flex:1; }
-    .player-count { color:var(--muted); font-size:.85rem; font-weight:700; min-width:60px; }
-    .created-at { color:var(--muted); font-size:.8rem; min-width:90px; text-align:right; }
-    .empty-hero { text-align:center; padding:3rem 1rem; }
-    .empty-icon { font-size:4rem; margin-bottom:1rem; }
+    .page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .page-title {
+        font-size: 1.8rem;
+        font-weight: 900;
+        letter-spacing: -.5px;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+    }
+
+    .empty-icon {
+        font-size: 3.5rem;
+        margin-bottom: 1rem;
+        display: block;
+    }
+
+    .empty-state h2 {
+        font-size: 1.3rem;
+        font-weight: 800;
+        margin-bottom: .5rem;
+    }
+
+    .empty-state p {
+        color: var(--muted);
+        margin-bottom: 1.5rem;
+    }
+
+    .game-row {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: .9rem 1.2rem;
+        border-bottom: 1px solid var(--border);
+        transition: background .15s;
+    }
+
+    .game-row:last-child { border-bottom: none; }
+    .game-row:hover { background: rgba(255,255,255,0.03); }
+
+    .game-row-name {
+        flex: 1;
+        font-weight: 800;
+        font-size: 1rem;
+    }
+
+    .game-row-meta {
+        color: var(--muted);
+        font-size: .82rem;
+        font-weight: 600;
+    }
+
+    .games-table-card {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        overflow: hidden;
+        margin-bottom: 1rem;
+    }
 </style>
 
 <div class="page-header">
-    <h1>🎮 All Games</h1>
+    <div class="page-title">🎮 All Games</div>
     <a href="{{ route('games.create') }}" class="btn">+ New Game</a>
 </div>
 
 @if($games->isEmpty())
-    <div class="card empty-hero">
-        <div class="empty-icon">🌙</div>
-        <p style="color:var(--muted);font-weight:700;margin-bottom:1.5rem;">No games yet. Start the hunt!</p>
+    <div class="card empty-state">
+        <span class="empty-icon">🌙</span>
+        <h2>No games yet</h2>
+        <p>Create the first one and let the hunt begin.</p>
         <a href="{{ route('games.create') }}" class="btn">Create a Game</a>
     </div>
 @else
-    @foreach($games as $game)
-        @php
-            $bc = match($game->status) {
-                'waiting'        => 'badge-waiting',
-                'roles_assigned' => 'badge-assigned',
-                'in_progress'    => 'badge-progress',
-                'finished'       => 'badge-finished',
-                default          => 'badge-waiting',
-            };
-        @endphp
-        <div class="game-row">
-            <div class="game-name">{{ $game->name }}</div>
-            <div class="player-count">👤 {{ $game->players_count }}</div>
-            <span class="badge {{ $bc }}">{{ $game->status_label }}</span>
-            <div class="created-at">{{ $game->created_at->diffForHumans() }}</div>
-            <a href="{{ route('games.lobby', $game) }}" class="btn btn-sm">View →</a>
-        </div>
-    @endforeach
+    <div class="games-table-card">
+        @foreach($games as $game)
+            <div class="game-row">
+                <div class="game-row-name">{{ $game->name }}</div>
+                <div class="game-row-meta">{{ $game->players_count }} players</div>
+                @php
+                    $badgeClass = match($game->status) {
+                        'waiting'        => 'badge-waiting',
+                        'roles_assigned' => 'badge-assigned',
+                        'in_progress'    => 'badge-progress',
+                        'finished'       => 'badge-finished',
+                        default          => 'badge-waiting',
+                    };
+                @endphp
+                <span class="badge {{ $badgeClass }}">{{ $game->status_label }}</span>
+                <div class="game-row-meta">{{ $game->created_at->diffForHumans() }}</div>
+                <a href="{{ route('games.show', $game) }}" class="btn-outline" style="padding:.35rem .9rem; font-size:.8rem;">View →</a>
+            </div>
+        @endforeach
+    </div>
 @endif
 @endsection

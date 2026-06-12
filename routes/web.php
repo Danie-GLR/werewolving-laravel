@@ -11,20 +11,15 @@ Route::get('/games',        [GameController::class, 'index'])->name('games.index
 Route::get('/games/create', [GameController::class, 'create'])->name('games.create');
 Route::post('/games',       [GameController::class, 'store'])->name('games.store');
 
-// Edit & delete
-Route::get('/games/{game}/edit',  [GameController::class, 'edit'])->name('games.edit');
-Route::patch('/games/{game}',     [GameController::class, 'update'])->name('games.update');
-Route::delete('/games/{game}',    [GameController::class, 'destroy'])->name('games.destroy');
-
-// Lobby
+// Lobby — shared join page, everyone visits this URL
 Route::get('/games/{game}/lobby',  [GameController::class, 'lobby'])->name('games.lobby');
 Route::post('/games/{game}/join',  [GameController::class, 'join'])->name('games.join');
 
-// Game master controls
+// Game master controls (session-protected inside controller)
 Route::post('/games/{game}/assign-roles', [GameController::class, 'assignRoles'])->name('games.assign-roles');
 Route::post('/games/{game}/start',        [GameController::class, 'start'])->name('games.start');
 
-// Secret role page
+// Each device's secret role page (no token in URL — session only)
 Route::get('/games/{game}/my-role', [GameController::class, 'myRole'])->name('games.my-role');
 
 // Live game board
@@ -40,5 +35,11 @@ Route::post('/games/{game}/resolve-night', [GameController::class, 'resolveNight
 Route::post('/games/{game}/day-vote',      [GameController::class, 'dayVote'])->name('games.day-vote');
 Route::post('/games/{game}/resolve-day',   [GameController::class, 'resolveDayManual'])->name('games.resolve-day');
 
-// Show (keep last to avoid catching other /games/{game}/xxx routes)
+// ── Chat ──────────────────────────────────────────────────────────────────────
+// GET  returns JSON array of messages for the current phase/round
+// POST sends a new message
+Route::get('/games/{game}/chat',  [GameController::class, 'chatMessages'])->name('games.chat');
+Route::post('/games/{game}/chat', [GameController::class, 'sendChat'])->name('games.chat.send');
+
+// Legacy redirect
 Route::get('/games/{game}', [GameController::class, 'show'])->name('games.show');

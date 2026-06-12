@@ -2,23 +2,21 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ChatMessage;
 use App\Models\Game;
 use App\Models\Player;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\View\View;
 
 class GameController extends Controller
 {
     // ── Session helper ────────────────────────────────────────────────────────
 
-    /** Session key that ties this browser to a player in this game */
     private function sessionKey(int $gameId): string
     {
         return "player_id_{$gameId}";
     }
 
-    /** Get the Player for the current device in this game (or null) */
     private function sessionPlayer(Game $game): ?Player
     {
         $id = session($this->sessionKey($game->id));
@@ -39,84 +37,27 @@ class GameController extends Controller
         return view('games.create');
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request)
     {
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'min:2',
-                'max:60',
-                'regex:/^[\w\s\-\'\.]+$/u',
-            ],
-        ], [
-            'name.required' => 'Please give your game a name.',
-            'name.min'      => 'The game name must be at least 2 characters.',
-            'name.max'      => 'The game name cannot be longer than 60 characters.',
-            'name.regex'    => 'The game name can only contain letters, numbers, spaces, hyphens, and apostrophes.',
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:100'],
         ]);
 
         $game = Game::create([
-            'name'   => $validated['name'],
+            'name'   => $data['name'],
             'status' => 'waiting',
             'phase'  => 'night',
-            'round'  => 0,
+            'round'  => 1,
         ]);
 
-        session(['gm_game_' . $game->id => true]);
+        session(["gm_{$game->id}" => true]);
 
         return redirect()->route('games.lobby', $game)
-                         ->with('success', 'Game created! Share the lobby URL with your players.');
+            ->with('success', 'Game created! Share this page with your players.');
     }
 
-    // ── Edit / Update / Destroy ───────────────────────────────────────────────
+    // ── Lobby ─────────────────────────────────────────────────────────────────
 
-    public function edit(Game $game): View
-    {
-        return view('games.edit', compact('game'));
-    }
-
-    public function update(Request $request, Game $game): RedirectResponse
-    {
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'min:2',
-                'max:60',
-                'regex:/^[\w\s\-\'\.]+$/u',
-            ],
-        ], [
-            'name.required' => 'Please enter a game name.',
-            'name.min'      => 'The game name must be at least 2 characters.',
-            'name.max'      => 'The game name cannot be longer than 60 characters.',
-            'name.regex'    => 'The game name can only contain letters, numbers, spaces, hyphens, and apostrophes.',
-        ]);
-
-        $game->update(['name' => $validated['name']]);
-
-        return redirect()->route('games.show', $game)
-                         ->with('success', 'Game name updated successfully.');
-    }
-
-    public function destroy(Game $game): RedirectResponse
-    {
-        // Only allow deleting games that are waiting or finished
-        if (!in_array($game->status, ['waiting', 'finished'])) {
-            return redirect()->route('games.show', $game)
-                             ->with('error', 'You can only delete a game that is waiting to start or already finished.');
-        }
-
-        $game->players()->delete();
-        $game->delete();
-
-        return redirect()->route('games.index')
-                         ->with('success', 'Game deleted successfully.');
-    }
-
-    // ── Lobby: players join from their own device ─────────────────────────────
-
-    /** The shared lobby page everyone visits to join */
     public function lobby(Game $game)
     {
         $game->load('players');
@@ -126,58 +67,36 @@ class GameController extends Controller
         return view('games.lobby', compact('game', 'myPlayer', 'isGM'));
     }
 
-    /** A device submits their name to join */
-    public function join(Request $request, Game $game): RedirectResponse
+    public function join(Request $request, Game $game)
     {
         if ($game->status !== 'waiting') {
-            return redirect()->route('games.lobby', $game)
-                             ->with('error', 'This game has already started. You cannot join now.');
+            return back()->with('error', 'This game has already started.');
         }
 
-        if (session('player_' . $game->id)) {
+        if ($this->sessionPlayer($game)) {
             return redirect()->route('games.lobby', $game);
         }
 
-        $validated = $request->validate([
-            'name' => [
-                'required',
-                'string',
-                'min:2',
-                'max:30',
-                'regex:/^[\w\s\-\']+$/u',
-            ],
-        ], [
-            'name.required' => 'Please enter your name to join.',
-            'name.min'      => 'Your name must be at least 2 characters.',
-            'name.max'      => 'Your name cannot be longer than 30 characters.',
-            'name.regex'    => 'Your name can only contain letters, numbers, spaces, and hyphens.',
+        $request->validate([
+            'name' => ['required', 'string', 'max:40'],
         ]);
 
-        // Check for duplicate name in this game
-        $nameExists = $game->players()
-            ->whereRaw('LOWER(name) = ?', [strtolower($validated['name'])])
-            ->exists();
+        $name = trim($request->name);
 
-        if ($nameExists) {
-            return redirect()->route('games.lobby', $game)
-                             ->withErrors(['name' => 'Someone with that name already joined. Please pick a different name.'])
-                             ->withInput();
-        }
-
-        // Check player cap
-        if ($game->players()->count() >= 20) {
-            return redirect()->route('games.lobby', $game)
-                             ->with('error', 'This game is full (max 20 players).');
+        if ($game->players()->whereRaw('LOWER(name) = ?', [strtolower($name)])->exists()) {
+            return back()->with('error', "The name \"{$name}\" is already taken in this game.");
         }
 
         $player = $game->players()->create([
-            'name'     => $validated['name'],
+            'name'     => $name,
+            'role'     => null,
             'is_alive' => true,
         ]);
 
-        session(['player_' . $game->id => $player->id]);
+        session([$this->sessionKey($game->id) => $player->id]);
 
-        return redirect()->route('games.lobby', $game);
+        return redirect()->route('games.lobby', $game)
+            ->with('success', "Welcome, {$name}! Wait for the game master to start.");
     }
 
     // ── Game master controls ──────────────────────────────────────────────────
@@ -237,9 +156,8 @@ class GameController extends Controller
             ->with('success', '🌙 Night falls… werewolves, choose your victim.');
     }
 
-    // ── Role reveal (session-based, no token in URL) ──────────────────────────
+    // ── Role reveal ───────────────────────────────────────────────────────────
 
-    /** Each device sees their own role — identified purely by session */
     public function myRole(Game $game)
     {
         $game->load('players');
@@ -262,6 +180,95 @@ class GameController extends Controller
         $isGM     = session("gm_{$game->id}", false);
 
         return view('games.play', compact('game', 'myPlayer', 'isGM'));
+    }
+
+    // ── Chat ──────────────────────────────────────────────────────────────────
+
+    /**
+     * GET /games/{game}/chat
+     * Returns JSON messages for the current phase channel.
+     * Night channel is restricted to werewolves only.
+     */
+    public function chatMessages(Request $request, Game $game): JsonResponse
+    {
+        $game->load('players');
+        $player = $this->sessionPlayer($game);
+        $isGM   = session("gm_{$game->id}", false);
+
+        $channel = $game->phase; // 'day' or 'night'
+
+        // Night: only werewolves (and GM as observer) may read
+        if ($channel === 'night' && !$isGM) {
+            if (!$player || $player->role !== 'Werewolf') {
+                return response()->json(['messages' => [], 'locked' => true,
+                    'reason' => 'The village sleeps… 🌙']);
+            }
+        }
+
+        $messages = ChatMessage::where('game_id', $game->id)
+            ->where('channel', $channel)
+            ->where('round', $game->round)
+            ->orderBy('created_at')
+            ->get()
+            ->map(fn($m) => [
+                'id'      => $m->id,
+                'name'    => $m->player_name,
+                'message' => $m->message,
+                'time'    => $m->created_at->format('H:i'),
+            ]);
+
+        return response()->json([
+            'messages' => $messages,
+            'locked'   => false,
+            'channel'  => $channel,
+            'round'    => $game->round,
+        ]);
+    }
+
+    /**
+     * POST /games/{game}/chat
+     * Stores a chat message, enforcing per-channel access rules.
+     */
+    public function sendChat(Request $request, Game $game): JsonResponse
+    {
+        $game->load('players');
+        $player = $this->sessionPlayer($game);
+        $isGM   = session("gm_{$game->id}", false);
+
+        if (!$player && !$isGM) {
+            return response()->json(['error' => 'Not authorised.'], 403);
+        }
+
+        $channel = $game->phase;
+
+        // Night: only alive werewolves may write
+        if ($channel === 'night') {
+            if (!$player || $player->role !== 'Werewolf' || !$player->is_alive) {
+                return response()->json(['error' => 'Only werewolves can chat at night.'], 403);
+            }
+        }
+
+        // Day: dead players cannot chat
+        if ($channel === 'day' && $player && !$player->is_alive) {
+            return response()->json(['error' => 'Eliminated players cannot chat.'], 403);
+        }
+
+        $validated = $request->validate([
+            'message' => ['required', 'string', 'max:300'],
+        ]);
+
+        $authorName = $player ? $player->name : '🎭 GM';
+
+        ChatMessage::create([
+            'game_id'     => $game->id,
+            'player_id'   => $player?->id ?? 0,
+            'player_name' => $authorName,
+            'channel'     => $channel,
+            'round'       => $game->round,
+            'message'     => $validated['message'],
+        ]);
+
+        return response()->json(['ok' => true]);
     }
 
     // ── Night actions ─────────────────────────────────────────────────────────
@@ -346,9 +353,9 @@ class GameController extends Controller
 
         $game->load('players');
 
-        $killId  = $game->night_kill_id;
-        $saveId  = $game->doctor_save_id;
-        $killed  = null;
+        $killId = $game->night_kill_id;
+        $saveId = $game->doctor_save_id;
+        $killed = null;
 
         if ($killId && $killId !== $saveId) {
             $killed = $game->players->firstWhere('id', $killId);
@@ -421,7 +428,7 @@ class GameController extends Controller
         return $this->resolveDay($game);
     }
 
-    private function resolveDay(Game $game): RedirectResponse
+    private function resolveDay(Game $game): \Illuminate\Http\RedirectResponse
     {
         $game->load('players');
         $eliminatedId = $game->tallyDayVotes();
@@ -459,7 +466,7 @@ class GameController extends Controller
         return redirect()->route('games.play', $game)->with('success', $msg);
     }
 
-    // ── Legacy show (redirects to lobby) ─────────────────────────────────────
+    // ── Legacy show ───────────────────────────────────────────────────────────
 
     public function show(Game $game)
     {

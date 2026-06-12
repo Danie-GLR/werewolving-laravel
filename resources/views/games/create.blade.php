@@ -1,46 +1,39 @@
 @extends('layouts.app')
-
 @section('title', 'Create Game')
-
 @section('content')
 <style>
-    .form-group{margin-bottom:1.2rem;}
-    .form-group label{display:block;margin-bottom:.4rem;font-size:.85rem;color:#9ca3af;}
-    .form-group input{width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;
-                       color:#eee;padding:.6rem .8rem;border-radius:6px;font-size:1rem;}
-    .form-group input:focus{outline:none;border-color:#e94560;}
-    .form-error{color:#fca5a5;font-size:.8rem;margin-top:.3rem;}
-    .info-box{background:#0f0f1a;border:1px solid #2a2a40;border-radius:6px;
-               padding:.8rem 1rem;margin-bottom:1.2rem;font-size:.82rem;color:#9ca3af;}
-    .info-box strong{color:#c084fc;}
+    .create-wrap { max-width:480px; margin:0 auto; }
+    .form-label  { display:block; font-weight:800; font-size:.85rem; margin-bottom:.4rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+    .form-group  { margin-bottom:1.2rem; }
+    .form-error  { color:#ff6b95; font-size:.82rem; font-weight:700; margin-top:.3rem; }
+    .how-it-works { background:var(--bg); border-radius:var(--radius-sm); padding:1rem 1.2rem; margin-bottom:1.2rem; }
+    .how-it-works .step { display:flex; gap:.75rem; align-items:flex-start; margin-bottom:.6rem; font-size:.88rem; font-weight:600; color:var(--muted); }
+    .how-it-works .step:last-child { margin-bottom:0; }
+    .step-num { background:var(--pink); color:#fff; border-radius:50%; width:22px; height:22px; display:flex; align-items:center; justify-content:center; font-size:.75rem; font-weight:800; flex-shrink:0; margin-top:.1rem; }
 </style>
 
-<div style="max-width:480px;margin:0 auto;">
-    <a href="{{ route('games.index') }}" style="color:#9ca3af;display:inline-block;margin-bottom:1rem;">← Back</a>
-    <h1 style="margin-bottom:.25rem;">Create a Game</h1>
-    <p style="color:#9ca3af;margin-bottom:1.5rem;">Give the game a name. Players will join from their own devices.</p>
+<div class="create-wrap">
+    <a href="{{ route('games.index') }}" class="text-muted" style="display:inline-block;margin-bottom:1rem;font-weight:700;">← Back</a>
+    <h1 style="margin-bottom:1.5rem;">Create a Game</h1>
 
     <div class="card">
         <form method="POST" action="{{ route('games.store') }}">
             @csrf
             <div class="form-group">
-                <label for="name">Game Name</label>
+                <label class="form-label" for="name">Game Name</label>
                 <input type="text" id="name" name="name" value="{{ old('name') }}"
                        placeholder="e.g. Night at the Tavern" required autofocus>
-                @error('name')
-                    <div class="form-error">{{ $message }}</div>
-                @enderror
+                @error('name')<div class="form-error">{{ $message }}</div>@enderror
             </div>
 
-            <div class="info-box">
-                <strong>How it works:</strong><br>
-                1. You create the game — you become the Game Master.<br>
-                2. Share the lobby URL with players — each joins on their own device and picks their name.<br>
-                3. You assign roles and start — everyone secretly sees only their own role.<br>
-                4. Night/day voting happens per device. Nobody else can see your role.
+            <div class="how-it-works">
+                <div class="step"><div class="step-num">1</div><span>You create the game — you become the <strong style="color:#fff;">Game Master</strong></span></div>
+                <div class="step"><div class="step-num">2</div><span>Share the lobby URL — each player joins on their own device &amp; picks a name</span></div>
+                <div class="step"><div class="step-num">3</div><span>You assign roles — everyone secretly sees <strong style="color:#fff;">only their own role</strong></span></div>
+                <div class="step"><div class="step-num">4</div><span>Night &amp; day voting happens per device. No peeking!</span></div>
             </div>
 
-            <button type="submit" class="btn" style="width:100%;">Create Game →</button>
+            <button type="submit" class="btn" style="width:100%;font-size:1.05rem;">Create Game →</button>
         </form>
     </div>
 </div>

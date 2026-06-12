@@ -1,91 +1,83 @@
 @extends('layouts.app')
-
 @section('title', $game->name)
-
 @section('content')
 <style>
-    /* ── Phase header ── */
-    .phase-header{text-align:center;padding:1.2rem 1rem 1rem;border-radius:10px;margin-bottom:1.5rem;}
-    .phase-night  {background:#0f0b2d;border:1px solid #4f46e5;}
-    .phase-day    {background:#1c1800;border:1px solid #d97706;}
-    .phase-fin    {background:#0d1f0d;border:1px solid #22c55e;}
-    .phase-label  {font-size:1.6rem;font-weight:bold;}
-    .phase-sub    {color:#9ca3af;margin-top:.2rem;font-size:.9rem;}
+    /* Phase banner */
+    .phase-banner { border-radius:var(--radius); padding:1.1rem 1.5rem; text-align:center; margin-bottom:1.4rem; box-shadow:var(--shadow); }
+    .phase-night  { background:linear-gradient(135deg,#1a1040,#2d1f6e); border:2px solid #5b4fcf; }
+    .phase-day    { background:linear-gradient(135deg,#3d2800,#6b4800); border:2px solid #f5c842; }
+    .phase-fin    { background:linear-gradient(135deg,#0d2d18,#1b5e35); border:2px solid #6ee7a0; }
+    .phase-label  { font-family:'Fredoka One',cursive; font-size:1.8rem; }
+    .phase-sub    { color:var(--muted); font-size:.88rem; font-weight:600; margin-top:.2rem; }
 
-    /* ── Role card ── */
-    .role-card{border-radius:10px;padding:1.5rem;text-align:center;margin-bottom:1.2rem;}
-    .role-icon-big{font-size:4rem;margin-bottom:.5rem;}
-    .role-title{font-size:1.4rem;font-weight:bold;margin-bottom:.4rem;}
-    .role-desc{color:#9ca3af;font-size:.9rem;line-height:1.6;}
-    .role-Werewolf{background:#2d0d0d;border:2px solid #e94560;}
-    .role-Villager{background:#0d2d18;border:2px solid #22c55e;}
-    .role-Seer    {background:#1a0d2d;border:2px solid #a855f7;}
-    .role-Doctor  {background:#0d1a2d;border:2px solid #3b82f6;}
+    /* Stats row */
+    .stats       { display:flex; gap:.75rem; margin-bottom:1.3rem; flex-wrap:wrap; }
+    .stat        { background:var(--surface); border-radius:var(--radius-sm); padding:.7rem 1rem; flex:1; min-width:72px; text-align:center; box-shadow:var(--shadow); }
+    .stat .val   { font-family:'Fredoka One',cursive; font-size:1.8rem; }
+    .stat .lbl   { font-size:.68rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-top:.1rem; }
 
-    /* ── Action section ── */
-    .action-section{background:#16213e;border-radius:8px;padding:1.2rem;margin-bottom:1rem;}
-    .action-section h2{margin-top:0;font-size:1.05rem;}
-    .vote-grid{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.75rem;}
-    .vote-btn{background:#0f3460;border:1px solid #334155;color:#eee;padding:.5rem .9rem;
-               border-radius:6px;cursor:pointer;font-size:.9rem;transition:background .15s;}
-    .vote-btn:hover{background:#e94560;border-color:#e94560;}
-    .vote-btn.voted{background:#16a34a;border-color:#16a34a;cursor:default;}
+    /* My role card */
+    .my-role-card { border-radius:var(--radius); padding:1.4rem 1.2rem; display:flex; align-items:center; gap:1.2rem; margin-bottom:1.2rem; box-shadow:var(--shadow); }
+    .mrc-icon     { font-size:3.5rem; flex-shrink:0; }
+    .mrc-body     {}
+    .mrc-title    { font-family:'Fredoka One',cursive; font-size:1.5rem; margin-bottom:.2rem; }
+    .mrc-desc     { color:rgba(255,255,255,.7); font-size:.88rem; font-weight:600; line-height:1.5; }
+    .mrc-Werewolf { background:linear-gradient(135deg,#7b1515,#c0392b); border:2px solid #e74c3c; }
+    .mrc-Villager { background:linear-gradient(135deg,#1b5e1b,#27ae60); border:2px solid #6abf4b; }
+    .mrc-Seer     { background:linear-gradient(135deg,#3d1060,#8e44ad); border:2px solid #a855f7; }
+    .mrc-Doctor   { background:linear-gradient(135deg,#0d2d5c,#2980b9); border:2px solid #3b82f6; }
 
-    /* ── Stats ── */
-    .stats{display:flex;gap:.75rem;margin-bottom:1.2rem;flex-wrap:wrap;}
-    .stat{background:#16213e;border-radius:8px;padding:.7rem 1rem;flex:1;min-width:80px;text-align:center;}
-    .stat .value{font-size:1.6rem;font-weight:bold;}
-    .stat .label{font-size:.7rem;color:#9ca3af;margin-top:.1rem;}
+    /* Action section */
+    .action-box   { background:var(--surface); border-radius:var(--radius); padding:1.2rem; margin-bottom:1rem; box-shadow:var(--shadow); }
+    .action-title { font-family:'Fredoka One',cursive; font-size:1.15rem; margin-bottom:.75rem; }
+    .vote-grid    { display:flex; flex-wrap:wrap; gap:.5rem; }
+    .vote-btn     { background:var(--surface2); border:2px solid transparent; color:#fff; font-family:'Nunito',sans-serif; font-weight:800; font-size:.9rem; padding:.45rem 1rem; border-radius:50px; cursor:pointer; transition:all .15s; }
+    .vote-btn:hover { background:var(--pink); border-color:var(--pink-dark); transform:translateY(-1px); }
+    .voted-label  { display:inline-flex; align-items:center; gap:.4rem; background:#1b5e35; border:2px solid #6ee7a0; border-radius:50px; padding:.4rem 1rem; font-weight:800; font-size:.9rem; color:#6ee7a0; }
 
-    /* ── Player grid ── */
-    .player-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:.6rem;margin:1rem 0;}
-    .player-card{background:#0f172a;border:1px solid #1e3a5f;border-radius:8px;padding:.8rem .6rem;text-align:center;}
-    .player-card.dead{opacity:.35;}
-    .player-card .av{font-size:1.6rem;margin-bottom:.3rem;}
-    .player-card .pn{font-size:.82rem;font-weight:bold;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-    .you-dot{width:6px;height:6px;background:#e94560;border-radius:50%;display:inline-block;margin-left:4px;vertical-align:middle;}
+    /* Player grid */
+    .p-grid       { display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:.65rem; margin:1rem 0; }
+    .p-card       { background:var(--surface); border-radius:var(--radius-sm); padding:.85rem .6rem; text-align:center; box-shadow:0 2px 8px rgba(0,0,0,.2); transition:opacity .2s; }
+    .p-card.dead  { opacity:.3; }
+    .p-card .av   { font-size:2rem; margin-bottom:.3rem; }
+    .p-card .pn   { font-weight:800; font-size:.8rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .you-dot      { display:inline-block; width:6px; height:6px; background:var(--pink); border-radius:50%; margin-left:3px; vertical-align:middle; }
 
-    /* ── GM bar ── */
-    .gm-bar{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:1rem 1.2rem;
-             margin-bottom:1rem;display:flex;gap:.75rem;flex-wrap:wrap;align-items:center;}
-    .btn-yellow{background:#d97706;color:#fff;border:none;padding:.5rem 1.2rem;border-radius:4px;cursor:pointer;font-size:.9rem;}
-    .btn-yellow:hover{background:#b45309;}
-    .tally-note{font-size:.8rem;color:#9ca3af;}
+    /* GM bar */
+    .gm-bar       { background:var(--surface); border:2px solid var(--pink); border-radius:var(--radius); padding:1rem 1.2rem; margin-bottom:1.1rem; display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; box-shadow:var(--shadow); }
+    .gm-badge     { font-size:.7rem; font-weight:800; text-transform:uppercase; letter-spacing:.07em; color:var(--pink); }
+    .tally        { font-size:.82rem; font-weight:700; color:var(--muted); }
 
-    /* ── Peek alert ── */
-    .alert-peek{background:#1a0d2d;border:1px solid #a855f7;border-radius:6px;
-                 padding:.75rem 1rem;color:#e9d5ff;margin-bottom:1rem;}
-    .role-chip{font-size:.72rem;padding:.15rem .5rem;border-radius:10px;display:inline-block;margin-top:.25rem;}
-    .role-chip.role-Werewolf{background:#4d0b0b;color:#fca5a5;}
-    .role-chip.role-Villager{background:#0d2d18;color:#86efac;}
-    .role-chip.role-Seer    {background:#2d1a4d;color:#d8b4fe;}
-    .role-chip.role-Doctor  {background:#0d1a3d;color:#93c5fd;}
+    /* Peek flash */
+    .peek-flash   { background:linear-gradient(135deg,#2d0d4d,#5b21b6); border:2px solid #a855f7; border-radius:var(--radius-sm); padding:.85rem 1rem; color:#e9d5ff; font-weight:700; margin-bottom:1rem; box-shadow:var(--shadow); }
+
+    /* Sleep screen */
+    .sleep-box    { text-align:center; padding:2rem 1rem; }
+    .sleep-icon   { font-size:3.5rem; margin-bottom:.5rem; }
 </style>
 
-{{-- Peek result flash --}}
+{{-- Peek flash --}}
 @if(session('peek_result'))
-    <div class="alert-peek">{{ session('peek_result') }}</div>
+    <div class="peek-flash">{{ session('peek_result') }}</div>
 @endif
 
 @php
-    $alive   = $game->players->where('is_alive', true);
+    $alive   = $game->players->where('is_alive',true);
     $wolves  = $alive->where('role','Werewolf')->count();
     $village = $alive->whereNotIn('role',['Werewolf'])->count();
     $phase   = $game->phase;
     $status  = $game->status;
 @endphp
 
-{{-- Phase header --}}
+{{-- Phase banner --}}
 @if($status === 'finished')
-    @php
-        $winner = $game->checkWinner() ?? ($wolves === 0 ? 'villagers' : 'werewolves');
-    @endphp
-    <div class="phase-header phase-fin">
+    @php $winner = ($wolves === 0) ? 'villagers' : 'werewolves'; @endphp
+    <div class="phase-banner phase-fin">
         <div class="phase-label">{{ $winner === 'villagers' ? '🎉 Villagers Win!' : '🐺 Werewolves Win!' }}</div>
-        <div class="phase-sub">{{ $game->name }} · Game over after {{ $game->round }} round(s)</div>
+        <div class="phase-sub">{{ $game->name }} · {{ $game->round }} round(s) played</div>
     </div>
 @else
-    <div class="phase-header {{ $phase === 'night' ? 'phase-night' : 'phase-day' }}">
+    <div class="phase-banner {{ $phase === 'night' ? 'phase-night' : 'phase-day' }}">
         <div class="phase-label">{{ $phase === 'night' ? '🌙 Night' : '☀️ Day' }} — Round {{ $game->round }}</div>
         <div class="phase-sub">{{ $game->name }}</div>
     </div>
@@ -93,81 +85,72 @@
 
 {{-- Stats --}}
 <div class="stats">
-    <div class="stat"><div class="value" style="color:#86efac;">{{ $alive->count() }}</div><div class="label">Alive</div></div>
-    <div class="stat"><div class="value" style="color:#fca5a5;">{{ $wolves }}</div><div class="label">Wolves 🐺</div></div>
-    <div class="stat"><div class="value" style="color:#86efac;">{{ $village }}</div><div class="label">Village</div></div>
-    <div class="stat"><div class="value" style="color:#9ca3af;">{{ $game->players->where('is_alive',false)->count() }}</div><div class="label">Dead ☠️</div></div>
+    <div class="stat"><div class="val" style="color:#6ee7a0;">{{ $alive->count() }}</div><div class="lbl">Alive</div></div>
+    <div class="stat"><div class="val" style="color:#fca5a5;">{{ $wolves }}</div><div class="lbl">Wolves</div></div>
+    <div class="stat"><div class="val" style="color:#86efac;">{{ $village }}</div><div class="lbl">Village</div></div>
+    <div class="stat"><div class="val" style="color:#888;">{{ $game->players->where('is_alive',false)->count() }}</div><div class="lbl">Dead</div></div>
 </div>
 
-{{-- ── GM controls ── --}}
+{{-- GM controls --}}
 @if($isGM && $status === 'in_progress')
     <div class="gm-bar">
+        <span class="gm-badge">🎮 GM</span>
         @if($phase === 'night')
-            @php $pendingW = $game->pendingWerewolfVotes(); @endphp
+            @php $pw = $game->pendingWerewolfVotes(); @endphp
             <form method="POST" action="{{ route('games.resolve-night', $game) }}">
-                @csrf
-                <button type="submit" class="btn btn-yellow">☀️ Resolve Night</button>
+                @csrf <button type="submit" class="btn btn-yellow-fill">☀️ Resolve Night</button>
             </form>
-            <span class="tally-note">
-                🐺 {{ $wolves - $pendingW }}/{{ $wolves }} wolves voted
-                @if($game->doctor_save_id) · 💊 Doctor saved @endif
+            <span class="tally">🐺 {{ $wolves - $pw }}/{{ $wolves }} wolves voted
+                @if($game->doctor_save_id) · 💊 Doc saved @endif
                 @if($game->seer_peek_id)   · 🔮 Seer peeked @endif
             </span>
         @else
-            @php $pendingD = $game->pendingDayVotes(); @endphp
+            @php $pd = $game->pendingDayVotes(); @endphp
             <form method="POST" action="{{ route('games.resolve-day', $game) }}">
-                @csrf
-                <button type="submit" class="btn btn-yellow">🌙 Resolve Day (force)</button>
+                @csrf <button type="submit" class="btn btn-yellow-fill">🌙 Force Resolve</button>
             </form>
-            <span class="tally-note">☀️ {{ $alive->count() - $pendingD }}/{{ $alive->count() }} voted</span>
+            <span class="tally">☀️ {{ $alive->count() - $pd }}/{{ $alive->count() }} voted</span>
         @endif
     </div>
 @endif
 
-{{-- ── MY ROLE CARD ── --}}
+{{-- My role card --}}
 @if($myPlayer)
-    <div class="role-card role-{{ $myPlayer->role ?? 'Villager' }}">
-        <div class="role-icon-big">{{ $myPlayer->role_icon }}</div>
-        <div class="role-title">
-            You are {{ $myPlayer->name }} — <strong>{{ $myPlayer->role }}</strong>
-            @if(!$myPlayer->is_alive)<span style="color:#e94560;"> (☠️ Eliminated)</span>@endif
-        </div>
-        <div class="role-desc">
-            @switch($myPlayer->role)
-                @case('Werewolf') Wake each night to eliminate a villager. Win when wolves ≥ village. @break
-                @case('Villager') Vote out the wolves during the day. Trust no one. @break
-                @case('Seer')     Peek at one player's role each night. Guide the village carefully. @break
-                @case('Doctor')   Protect one player from the wolves each night. @break
-            @endswitch
+    <div class="my-role-card mrc-{{ $myPlayer->role ?? 'Villager' }}">
+        <div class="mrc-icon">{{ $myPlayer->role_icon }}</div>
+        <div class="mrc-body">
+            <div class="mrc-title">
+                {{ $myPlayer->name }} — {{ $myPlayer->role }}
+                @if(!$myPlayer->is_alive) <span style="color:#fca5a5;">☠️</span>@endif
+            </div>
+            <div class="mrc-desc">
+                @switch($myPlayer->role)
+                    @case('Werewolf') Wake each night to eliminate a villager. Win when wolves ≥ village. @break
+                    @case('Villager') Vote out the wolves during the day. Trust no one. @break
+                    @case('Seer')     Peek at one player's role each night. Guide the village wisely. @break
+                    @case('Doctor')   Protect one player from the wolves each night. @break
+                @endswitch
+            </div>
         </div>
     </div>
 @endif
 
-{{-- ── NIGHT ACTIONS ── --}}
+{{-- Night actions --}}
 @if($myPlayer && $myPlayer->is_alive && $status === 'in_progress' && $phase === 'night')
 
-    {{-- Werewolf kill vote --}}
     @if($myPlayer->role === 'Werewolf')
-        <div class="action-section">
-            <h2>🐺 Choose tonight's victim</h2>
+        <div class="action-box">
+            <div class="action-title">🐺 Choose tonight's victim</div>
+            @php $fw = $alive->where('role','Werewolf')->where('id','!=',$myPlayer->id); @endphp
+            @if($fw->count())<p style="color:#fca5a5;font-size:.82rem;font-weight:700;margin-bottom:.6rem;">Fellow wolves: {{ $fw->pluck('name')->join(', ') }}</p>@endif
             @if($myPlayer->night_vote_target_id)
-                @php $vt = $game->players->firstWhere('id', $myPlayer->night_vote_target_id); @endphp
-                <p style="color:#86efac;">✅ You voted for <strong>{{ $vt?->name }}</strong>.</p>
-                @php $fellowWolves = $game->players->where('role','Werewolf')->where('is_alive',true)->where('id','!=',$myPlayer->id); @endphp
-                @if($fellowWolves->count())
-                    <p style="color:#fca5a5;font-size:.82rem;">Fellow wolves: {{ $fellowWolves->pluck('name')->join(', ') }}</p>
-                @endif
+                @php $vt = $game->players->firstWhere('id',$myPlayer->night_vote_target_id); @endphp
+                <span class="voted-label">✅ Voted for {{ $vt?->name }}</span>
             @else
-                @php $fellowWolves = $game->players->where('role','Werewolf')->where('is_alive',true)->where('id','!=',$myPlayer->id); @endphp
-                @if($fellowWolves->count())
-                    <p style="color:#fca5a5;font-size:.82rem;">Fellow wolves: {{ $fellowWolves->pluck('name')->join(', ') }}</p>
-                @endif
-                <p style="color:#9ca3af;font-size:.85rem;">Pick a non-wolf target:</p>
                 <div class="vote-grid">
                     @foreach($alive->whereNotIn('role',['Werewolf']) as $t)
                         <form method="POST" action="{{ route('games.night-vote', $game) }}">
-                            @csrf
-                            <input type="hidden" name="target_id" value="{{ $t->id }}">
+                            @csrf <input type="hidden" name="target_id" value="{{ $t->id }}">
                             <button type="submit" class="vote-btn">{{ $t->name }}</button>
                         </form>
                     @endforeach
@@ -176,19 +159,17 @@
         </div>
     @endif
 
-    {{-- Doctor save --}}
     @if($myPlayer->role === 'Doctor')
-        <div class="action-section">
-            <h2>💊 Protect someone tonight</h2>
+        <div class="action-box">
+            <div class="action-title">💊 Protect someone tonight</div>
             @if($game->doctor_save_id)
-                @php $sv = $game->players->firstWhere('id', $game->doctor_save_id); @endphp
-                <p style="color:#86efac;">✅ Protecting <strong>{{ $sv?->name }}</strong> tonight.</p>
+                @php $sv = $game->players->firstWhere('id',$game->doctor_save_id); @endphp
+                <span class="voted-label">✅ Protecting {{ $sv?->name }}</span>
             @else
                 <div class="vote-grid">
                     @foreach($alive as $t)
                         <form method="POST" action="{{ route('games.doctor-save', $game) }}">
-                            @csrf
-                            <input type="hidden" name="target_id" value="{{ $t->id }}">
+                            @csrf <input type="hidden" name="target_id" value="{{ $t->id }}">
                             <button type="submit" class="vote-btn">{{ $t->name }}</button>
                         </form>
                     @endforeach
@@ -197,18 +178,16 @@
         </div>
     @endif
 
-    {{-- Seer peek --}}
     @if($myPlayer->role === 'Seer')
-        <div class="action-section">
-            <h2>🔮 Peek at someone's role</h2>
+        <div class="action-box">
+            <div class="action-title">🔮 Peek at someone's role</div>
             @if($myPlayer->has_peeked)
-                <p style="color:#86efac;">✅ You've used your vision this round.</p>
+                <span class="voted-label">✅ Vision used this round</span>
             @else
                 <div class="vote-grid">
                     @foreach($alive->where('id','!=',$myPlayer->id) as $t)
                         <form method="POST" action="{{ route('games.seer-peek', $game) }}">
-                            @csrf
-                            <input type="hidden" name="target_id" value="{{ $t->id }}">
+                            @csrf <input type="hidden" name="target_id" value="{{ $t->id }}">
                             <button type="submit" class="vote-btn">{{ $t->name }}</button>
                         </form>
                     @endforeach
@@ -217,28 +196,25 @@
         </div>
     @endif
 
-    {{-- Villager waiting screen --}}
     @if($myPlayer->role === 'Villager')
-        <div class="action-section" style="text-align:center;padding:1.5rem;">
-            <div style="font-size:2.5rem;">😴</div>
-            <p style="color:#9ca3af;margin-top:.5rem;">It's night. Sleep tight.<br>Actions happen in the morning.</p>
+        <div class="action-box sleep-box">
+            <div class="sleep-icon">😴</div>
+            <p style="color:var(--muted);font-weight:700;">It's night. Sleep tight.<br>Voting opens at dawn.</p>
         </div>
     @endif
 
-{{-- ── DAY ACTIONS ── --}}
+{{-- Day actions --}}
 @elseif($myPlayer && $myPlayer->is_alive && $status === 'in_progress' && $phase === 'day')
-    <div class="action-section">
-        <h2>☀️ Vote to eliminate a suspect</h2>
+    <div class="action-box">
+        <div class="action-title">☀️ Vote to eliminate a suspect</div>
         @if($myPlayer->day_vote_target_id)
-            @php $dv = $game->players->firstWhere('id', $myPlayer->day_vote_target_id); @endphp
-            <p style="color:#86efac;">✅ You voted for <strong>{{ $dv?->name }}</strong>. Waiting for others…</p>
+            @php $dv = $game->players->firstWhere('id',$myPlayer->day_vote_target_id); @endphp
+            <span class="voted-label">✅ Voted for {{ $dv?->name }} — waiting for others…</span>
         @else
-            <p style="color:#9ca3af;font-size:.85rem;">Who do you think is a werewolf?</p>
             <div class="vote-grid">
                 @foreach($alive->where('id','!=',$myPlayer->id) as $t)
                     <form method="POST" action="{{ route('games.day-vote', $game) }}">
-                        @csrf
-                        <input type="hidden" name="target_id" value="{{ $t->id }}">
+                        @csrf <input type="hidden" name="target_id" value="{{ $t->id }}">
                         <button type="submit" class="vote-btn">{{ $t->name }}</button>
                     </form>
                 @endforeach
@@ -246,20 +222,19 @@
         @endif
     </div>
 
-{{-- Eliminated player ── --}}
 @elseif($myPlayer && !$myPlayer->is_alive && $status === 'in_progress')
-    <div class="action-section" style="text-align:center;padding:1.5rem;">
-        <div style="font-size:2.5rem;">☠️</div>
-        <p style="color:#e94560;font-weight:bold;margin-top:.5rem;">You've been eliminated.</p>
-        <p style="color:#9ca3af;font-size:.85rem;">Spectate the rest of the game.</p>
+    <div class="action-box sleep-box">
+        <div class="sleep-icon">☠️</div>
+        <p style="color:#fca5a5;font-weight:800;">You've been eliminated.</p>
+        <p style="color:var(--muted);font-size:.88rem;font-weight:600;margin-top:.3rem;">Spectate the rest of the game.</p>
     </div>
 @endif
 
-{{-- ── Player grid (no roles shown unless game over or GM) ── --}}
-<h2 style="margin-bottom:.5rem;">Players</h2>
-<div class="player-grid">
-    @foreach($game->players as $p)
-        <div class="player-card {{ !$p->is_alive ? 'dead' : '' }}">
+{{-- Player grid --}}
+<h2 style="margin-bottom:.6rem;">Players</h2>
+<div class="p-grid">
+    @foreach($game->players as $i => $p)
+        <div class="p-card {{ !$p->is_alive ? 'dead' : '' }}">
             <div class="av">
                 @if($status === 'finished' || ($myPlayer && $myPlayer->id === $p->id))
                     {{ $p->role_icon }}
@@ -271,24 +246,20 @@
             </div>
             <div class="pn">
                 {{ $p->name }}
-                @if($myPlayer && $myPlayer->id === $p->id)
-                    <span class="you-dot" title="you"></span>
-                @endif
+                @if($myPlayer && $myPlayer->id === $p->id)<span class="you-dot"></span>@endif
             </div>
             @if($status === 'finished')
-                <span class="role-chip role-{{ $p->role }}">{{ $p->role }}</span>
+                <div style="margin-top:.3rem;">
+                    <span class="role-pill rp-{{ $p->role }}" style="font-size:.65rem;">{{ $p->role }}</span>
+                </div>
             @endif
-            @if(!$p->is_alive)
-                <div style="font-size:.68rem;color:#e94560;margin-top:.2rem;">☠️</div>
-            @endif
+            @if(!$p->is_alive)<div style="font-size:.65rem;color:#e94560;margin-top:.2rem;">☠️</div>@endif
         </div>
     @endforeach
 </div>
 
-{{-- Auto-refresh every 6s so everyone sees phase changes --}}
 @if($status === 'in_progress')
     <meta http-equiv="refresh" content="6">
-    <p style="text-align:center;color:#4b5563;font-size:.72rem;margin-top:1rem;">Refreshes every 6 seconds</p>
+    <p style="text-align:center;color:#555;font-size:.72rem;margin-top:1rem;font-weight:600;">Auto-refreshes every 6 seconds</p>
 @endif
-
 @endsection

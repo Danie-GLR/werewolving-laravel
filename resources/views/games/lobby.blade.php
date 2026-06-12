@@ -1,115 +1,106 @@
 @extends('layouts.app')
-
-@section('title', 'Join — ' . $game->name)
-
+@section('title', 'Lobby — ' . $game->name)
 @section('content')
 <style>
-    .lobby-hero { text-align:center; padding:2rem 1rem 1.5rem; }
-    .game-code  { font-size:2.5rem; font-weight:900; letter-spacing:.15em; color:#e94560; margin:.5rem 0; }
-    .status-pill{display:inline-block;padding:.25rem .9rem;border-radius:20px;font-size:.8rem;font-weight:bold;}
-    .pill-waiting  {background:#1f2937;color:#9ca3af;border:1px solid #374151;}
-    .pill-assigned {background:#1a1a4d;color:#a5b4fc;border:1px solid #4f46e5;}
-    .pill-progress {background:#2d1a00;color:#fcd34d;border:1px solid #d97706;}
+    .lobby-title { font-family:'Fredoka One',cursive; font-size:2.4rem; color:var(--pink); text-align:center; margin-bottom:.25rem; text-shadow:0 3px 10px rgba(232,54,106,.35); }
+    .lobby-sub   { text-align:center; color:var(--muted); font-weight:700; margin-bottom:1.2rem; }
 
-    .join-card  { background:#16213e;border-radius:10px;padding:1.5rem;max-width:420px;margin:0 auto 1.5rem; }
-    .join-card h2{ margin-top:0; }
-    .form-group { margin-bottom:1rem; }
-    .form-group label{ display:block;margin-bottom:.4rem;font-size:.85rem;color:#9ca3af; }
-    .form-group input{ width:100%;box-sizing:border-box;background:#0f172a;border:1px solid #334155;
-                        color:#eee;padding:.6rem .8rem;border-radius:6px;font-size:1rem; }
-    .form-group input:focus{ outline:none;border-color:#e94560; }
-    .form-error { color:#fca5a5;font-size:.8rem;margin-top:.3rem; }
+    .join-card   { background:var(--surface); border-radius:var(--radius); padding:1.5rem; max-width:420px; margin:0 auto 1.2rem; box-shadow:var(--shadow); }
+    .form-label  { display:block; font-weight:800; font-size:.82rem; margin-bottom:.4rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+    .form-error  { color:#ff6b95; font-size:.82rem; font-weight:700; margin-top:.3rem; }
 
-    .player-list{ background:#16213e;border-radius:10px;padding:1.2rem 1.5rem;margin-bottom:1rem; }
-    .player-list h2{ margin-top:0;margin-bottom:.75rem; }
-    .player-row { display:flex;align-items:center;gap:.75rem;padding:.5rem 0;border-bottom:1px solid #1e293b; }
-    .player-row:last-child{border-bottom:none;}
-    .player-avatar{ width:36px;height:36px;background:#0f172a;border-radius:50%;
-                     display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;}
-    .player-name-text{font-weight:bold;}
-    .you-tag{font-size:.7rem;background:#e94560;color:#fff;padding:.1rem .4rem;border-radius:8px;margin-left:.4rem;}
-    .empty-state{color:#6b7280;font-style:italic;font-size:.9rem;padding:.5rem 0;}
+    /* Player list */
+    .player-list { background:var(--surface); border-radius:var(--radius); padding:1.2rem; margin-bottom:1rem; box-shadow:var(--shadow); }
+    .player-row  { display:flex; align-items:center; gap:.85rem; padding:.55rem 0; border-bottom:1px solid var(--surface2); }
+    .player-row:last-child { border-bottom:none; }
+    .p-avatar    { width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Fredoka One',cursive; font-size:1.1rem; color:#fff; flex-shrink:0; }
+    .p-name      { font-weight:800; font-size:.95rem; }
+    .you-tag     { background:var(--pink); color:#fff; font-size:.68rem; font-weight:800; padding:.1rem .5rem; border-radius:20px; margin-left:.4rem; text-transform:uppercase; }
+    .empty-state { color:var(--muted); font-style:italic; font-size:.9rem; padding:.5rem 0; }
 
-    .gm-controls{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:1.2rem 1.5rem;margin-bottom:1rem;}
-    .gm-controls h2{margin-top:0;font-size:1rem;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;}
-    .btn-row{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:.75rem;}
-    .btn-outline{background:transparent;border:1px solid #e94560;color:#e94560;padding:.5rem 1.2rem;
-                  border-radius:4px;cursor:pointer;text-decoration:none;font-size:.95rem;}
-    .btn-outline:hover{background:#e94560;color:#fff;}
-    .btn-green{background:#16a34a;color:#fff;padding:.5rem 1.2rem;border:none;border-radius:4px;cursor:pointer;font-size:.95rem;}
-    .btn-green:hover{background:#15803d;}
-    .hint{color:#6b7280;font-size:.8rem;margin-top:.5rem;}
+    /* GM panel */
+    .gm-panel    { background:var(--surface); border-radius:var(--radius); padding:1.2rem 1.4rem; border:2px solid var(--pink); box-shadow:var(--shadow); }
+    .gm-label    { font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.08em; color:var(--pink); margin-bottom:.6rem; }
+    .btn-row     { display:flex; gap:.75rem; flex-wrap:wrap; margin-top:.75rem; }
 
-    .role-dist{background:#0f0f1a;border:1px solid #2a2a40;border-radius:6px;
-               padding:.7rem 1rem;font-size:.8rem;color:#9ca3af;margin-top:.75rem;}
-    .role-dist strong{color:#c084fc;}
+    .role-dist   { background:var(--bg); border-radius:var(--radius-sm); padding:.75rem 1rem; font-size:.82rem; color:var(--muted); margin-top:.75rem; font-weight:600; }
+    .role-dist strong { color:#c084fc; }
+
+    /* Status pill */
+    .status-pill { display:inline-flex; align-items:center; justify-content:center; padding:.3rem 1rem; border-radius:20px; font-size:.8rem; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }
+
+    /* Avatar colours cycle */
+    .av0{background:#e8366a;} .av1{background:#6abf4b;} .av2{background:#f5c842;color:#333;}
+    .av3{background:#8e44ad;} .av4{background:#2980b9;} .av5{background:#e05a2b;}
+    .av6{background:#16a085;} .av7{background:#c0392b;}
 </style>
 
-<div class="lobby-hero">
-    <div style="color:#9ca3af;font-size:.9rem;">Share this page URL with everyone</div>
-    <div class="game-code">{{ $game->name }}</div>
-    <span class="status-pill {{ $game->status === 'waiting' ? 'pill-waiting' : ($game->status === 'roles_assigned' ? 'pill-assigned' : 'pill-progress') }}">
-        {{ $game->status_label }}
-    </span>
+<div class="lobby-title">{{ $game->name }}</div>
+<div class="lobby-sub">
+    @if($game->status==='waiting')
+        <span class="status-pill badge-waiting">⏳ Waiting for players</span>
+    @elseif($game->status==='roles_assigned')
+        <span class="status-pill badge-assigned">🎭 Roles assigned</span>
+    @elseif($game->status==='in_progress')
+        <span class="status-pill badge-progress">🐺 In progress</span>
+    @else
+        <span class="status-pill badge-finished">✅ Finished</span>
+    @endif
 </div>
 
-{{-- ── Join form (only shown when game is still open and device hasn't joined) ── --}}
+{{-- Join form --}}
 @if($game->status === 'waiting' && !$myPlayer)
     <div class="join-card">
-        <h2>👋 Enter your name to join</h2>
+        <h2 style="margin-bottom:1rem;">👋 Join Game</h2>
         <form method="POST" action="{{ route('games.join', $game) }}">
             @csrf
-            <div class="form-group">
-                <label for="name">Your name</label>
+            <div style="margin-bottom:1rem;">
+                <label class="form-label" for="name">Your name</label>
                 <input type="text" id="name" name="name" value="{{ old('name') }}"
                        placeholder="e.g. Alice" autocomplete="off" autofocus required>
-                @error('name')
-                    <div class="form-error">{{ $message }}</div>
-                @enderror
-                @if(session('error'))
-                    <div class="form-error">{{ session('error') }}</div>
-                @endif
+                @error('name')<div class="form-error">{{ $message }}</div>@enderror
+                @if(session('error'))<div class="form-error">{{ session('error') }}</div>@endif
             </div>
-            <button type="submit" class="btn" style="width:100%;">Join Game →</button>
+            <button type="submit" class="btn" style="width:100%;">Join →</button>
         </form>
     </div>
 @endif
 
-{{-- ── Already joined ── --}}
+{{-- Waiting confirmation --}}
 @if($myPlayer && $game->status === 'waiting')
     <div class="join-card" style="text-align:center;">
-        <div style="font-size:2.5rem;">✅</div>
-        <h2 style="margin:.5rem 0;">You're in, {{ $myPlayer->name }}!</h2>
-        <p style="color:#9ca3af;">Waiting for the game master to start…</p>
+        <div style="font-size:3rem;margin-bottom:.5rem;">✅</div>
+        <h2 style="margin-bottom:.4rem;">You're in!</h2>
+        <p class="text-muted" style="font-weight:600;">Waiting for the game master to start…</p>
     </div>
 @endif
 
-{{-- ── Roles have been assigned — go see yours ── --}}
-@if($myPlayer && in_array($game->status, ['roles_assigned', 'in_progress']))
+{{-- Roles ready --}}
+@if($myPlayer && in_array($game->status, ['roles_assigned','in_progress']))
     <div class="join-card" style="text-align:center;">
-        <div style="font-size:2.5rem;">🎭</div>
-        <h2 style="margin:.5rem 0;">Roles are ready!</h2>
-        <a href="{{ route('games.play', $game) }}" class="btn" style="width:100%;display:block;box-sizing:border-box;text-align:center;">
-            See your role & play →
+        <div style="font-size:3rem;margin-bottom:.5rem;">🎭</div>
+        <h2 style="margin-bottom:.75rem;">Roles are ready!</h2>
+        <a href="{{ route('games.play', $game) }}" class="btn" style="width:100%;display:block;text-align:center;">
+            See your role &amp; play →
         </a>
     </div>
 @endif
 
-{{-- ── Game already started, device has no session ── --}}
+{{-- Locked out --}}
 @if(!$myPlayer && $game->status !== 'waiting')
     <div class="join-card" style="text-align:center;">
-        <div style="font-size:2.5rem;">🔒</div>
-        <p style="color:#9ca3af;">This game has already started.<br>You can't join mid-game.</p>
+        <div style="font-size:3rem;margin-bottom:.5rem;">🔒</div>
+        <p class="text-muted" style="font-weight:700;">This game has already started.</p>
     </div>
 @endif
 
-{{-- ── Player list ── --}}
+{{-- Player list --}}
 <div class="player-list">
-    <h2>🧑‍🤝‍🧑 Players ({{ $game->players->count() }})</h2>
-    @forelse($game->players as $p)
+    <h2 style="margin-bottom:.9rem;">🧑‍🤝‍🧑 Players ({{ $game->players->count() }})</h2>
+    @forelse($game->players as $i => $p)
         <div class="player-row">
-            <div class="player-avatar">{{ mb_substr($p->name, 0, 1) }}</div>
-            <div class="player-name-text">
+            <div class="p-avatar av{{ $i % 8 }}">{{ mb_strtoupper(mb_substr($p->name,0,1)) }}</div>
+            <div class="p-name">
                 {{ $p->name }}
                 @if($myPlayer && $myPlayer->id === $p->id)
                     <span class="you-tag">you</span>
@@ -117,19 +108,17 @@
             </div>
         </div>
     @empty
-        <div class="empty-state">No players yet — be the first to join!</div>
+        <div class="empty-state">No players yet — be the first!</div>
     @endforelse
 </div>
 
-{{-- ── Game master controls ── --}}
+{{-- GM controls --}}
 @if($isGM)
-    <div class="gm-controls">
-        <h2>🎮 Game Master Controls</h2>
+    <div class="gm-panel">
+        <div class="gm-label">🎮 Game Master Controls</div>
 
         @if($game->status === 'waiting')
-            <p style="color:#9ca3af;font-size:.9rem;margin:.25rem 0 0;">
-                Wait for everyone to join, then assign roles.
-            </p>
+            <p class="text-muted" style="font-size:.88rem;font-weight:600;">Wait for everyone to join, then assign roles.</p>
             <div class="role-dist">
                 <strong>Role distribution (auto):</strong><br>
                 4–6 players → 1 Werewolf · Villagers<br>
@@ -139,35 +128,33 @@
             <div class="btn-row">
                 <form method="POST" action="{{ route('games.assign-roles', $game) }}">
                     @csrf
-                    <button type="submit" class="btn">🎲 Assign Roles & Start →</button>
+                    <button type="submit" class="btn">🎲 Assign Roles</button>
                 </form>
             </div>
         @endif
 
         @if($game->status === 'roles_assigned')
-            <p style="color:#86efac;font-size:.9rem;">✅ Roles assigned — players can now see their role.</p>
+            <p style="color:#6ee7a0;font-size:.88rem;font-weight:700;">✅ Roles assigned — players can now see their role.</p>
             <div class="btn-row">
                 <form method="POST" action="{{ route('games.assign-roles', $game) }}">
                     @csrf
-                    <button type="submit" class="btn btn-outline">🔄 Re-assign Roles</button>
+                    <button type="submit" class="btn btn-ghost btn-sm">🔄 Re-assign</button>
                 </form>
                 <form method="POST" action="{{ route('games.start', $game) }}">
                     @csrf
-                    <button type="submit" class="btn btn-green">▶ Start Game</button>
+                    <button type="submit" class="btn btn-green-fill">▶ Start Game</button>
                 </form>
             </div>
         @endif
 
         @if($game->status === 'in_progress')
-            <a href="{{ route('games.play', $game) }}" class="btn btn-green">🎮 Go to Game Board →</a>
+            <a href="{{ route('games.play', $game) }}" class="btn btn-green-fill">🎮 Go to Game Board →</a>
         @endif
     </div>
 @endif
 
-{{-- Auto-refresh while waiting --}}
 @if($game->status === 'waiting')
     <meta http-equiv="refresh" content="5">
-    <p style="text-align:center;color:#4b5563;font-size:.75rem;">Page refreshes every 5 seconds</p>
+    <p style="text-align:center;color:#555;font-size:.75rem;margin-top:1rem;font-weight:600;">Refreshes every 5 seconds</p>
 @endif
-
 @endsection

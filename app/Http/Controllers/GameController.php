@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Game;
 use App\Models\Player;
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\View\View;
 
 class GameController extends Controller
 {
@@ -37,24 +39,79 @@ class GameController extends Controller
         return view('games.create');
     }
 
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:100'],
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'min:2',
+                'max:60',
+                'regex:/^[\w\s\-\'\.]+$/u',
+            ],
+        ], [
+            'name.required' => 'Please give your game a name.',
+            'name.min'      => 'The game name must be at least 2 characters.',
+            'name.max'      => 'The game name cannot be longer than 60 characters.',
+            'name.regex'    => 'The game name can only contain letters, numbers, spaces, hyphens, and apostrophes.',
         ]);
 
         $game = Game::create([
-            'name'   => $data['name'],
+            'name'   => $validated['name'],
             'status' => 'waiting',
             'phase'  => 'night',
-            'round'  => 1,
+            'round'  => 0,
         ]);
 
-        // Mark this device as the game master via session
-        session(["gm_{$game->id}" => true]);
+        session(['gm_game_' . $game->id => true]);
 
         return redirect()->route('games.lobby', $game)
-            ->with('success', 'Game created! Share this page with your players.');
+                         ->with('success', 'Game created! Share the lobby URL with your players.');
+    }
+
+    // ── Edit / Update / Destroy ───────────────────────────────────────────────
+
+    public function edit(Game $game): View
+    {
+        return view('games.edit', compact('game'));
+    }
+
+    public function update(Request $request, Game $game): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'min:2',
+                'max:60',
+                'regex:/^[\w\s\-\'\.]+$/u',
+            ],
+        ], [
+            'name.required' => 'Please enter a game name.',
+            'name.min'      => 'The game name must be at least 2 characters.',
+            'name.max'      => 'The game name cannot be longer than 60 characters.',
+            'name.regex'    => 'The game name can only contain letters, numbers, spaces, hyphens, and apostrophes.',
+        ]);
+
+        $game->update(['name' => $validated['name']]);
+
+        return redirect()->route('games.show', $game)
+                         ->with('success', 'Game name updated successfully.');
+    }
+
+    public function destroy(Game $game): RedirectResponse
+    {
+        // Only allow deleting games that are waiting or finished
+        if (!in_array($game->status, ['waiting', 'finished'])) {
+            return redirect()->route('games.show', $game)
+                             ->with('error', 'You can only delete a game that is waiting to start or already finished.');
+        }
+
+        $game->players()->delete();
+        $game->delete();
+
+        return redirect()->route('games.index')
+                         ->with('success', 'Game deleted successfully.');
     }
 
     // ── Lobby: players join from their own device ─────────────────────────────
@@ -70,39 +127,57 @@ class GameController extends Controller
     }
 
     /** A device submits their name to join */
-    public function join(Request $request, Game $game)
+    public function join(Request $request, Game $game): RedirectResponse
     {
         if ($game->status !== 'waiting') {
-            return back()->with('error', 'This game has already started.');
+            return redirect()->route('games.lobby', $game)
+                             ->with('error', 'This game has already started. You cannot join now.');
         }
 
-        // If this device already joined, just go back to lobby
-        if ($this->sessionPlayer($game)) {
+        if (session('player_' . $game->id)) {
             return redirect()->route('games.lobby', $game);
         }
 
-        $request->validate([
-            'name' => ['required', 'string', 'max:40'],
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'min:2',
+                'max:30',
+                'regex:/^[\w\s\-\']+$/u',
+            ],
+        ], [
+            'name.required' => 'Please enter your name to join.',
+            'name.min'      => 'Your name must be at least 2 characters.',
+            'name.max'      => 'Your name cannot be longer than 30 characters.',
+            'name.regex'    => 'Your name can only contain letters, numbers, spaces, and hyphens.',
         ]);
 
-        $name = trim($request->name);
+        // Check for duplicate name in this game
+        $nameExists = $game->players()
+            ->whereRaw('LOWER(name) = ?', [strtolower($validated['name'])])
+            ->exists();
 
-        // Prevent duplicate names in the same game
-        if ($game->players()->whereRaw('LOWER(name) = ?', [strtolower($name)])->exists()) {
-            return back()->with('error', "The name \"{$name}\" is already taken in this game.");
+        if ($nameExists) {
+            return redirect()->route('games.lobby', $game)
+                             ->withErrors(['name' => 'Someone with that name already joined. Please pick a different name.'])
+                             ->withInput();
+        }
+
+        // Check player cap
+        if ($game->players()->count() >= 20) {
+            return redirect()->route('games.lobby', $game)
+                             ->with('error', 'This game is full (max 20 players).');
         }
 
         $player = $game->players()->create([
-            'name'     => $name,
-            'role'     => null,
+            'name'     => $validated['name'],
             'is_alive' => true,
         ]);
 
-        // Bind this device to this player
-        session([$this->sessionKey($game->id) => $player->id]);
+        session(['player_' . $game->id => $player->id]);
 
-        return redirect()->route('games.lobby', $game)
-            ->with('success', "Welcome, {$name}! Wait for the game master to start.");
+        return redirect()->route('games.lobby', $game);
     }
 
     // ── Game master controls ──────────────────────────────────────────────────
@@ -346,7 +421,7 @@ class GameController extends Controller
         return $this->resolveDay($game);
     }
 
-    private function resolveDay(Game $game): \Illuminate\Http\RedirectResponse
+    private function resolveDay(Game $game): RedirectResponse
     {
         $game->load('players');
         $eliminatedId = $game->tallyDayVotes();

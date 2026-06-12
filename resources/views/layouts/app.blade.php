@@ -210,6 +210,16 @@
             font-weight: 700;
         }
 
+        .flash-error {
+            background: rgba(233,69,96,0.1);
+            border: 1px solid rgba(233,69,96,0.3);
+            color: #fca5a5;
+            padding: .8rem 1.2rem;
+            border-radius: var(--radius-sm);
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
         /* ── Utilities ── */
         .flex { display: flex; gap: .75rem; align-items: center; }
         .text-muted { color: var(--muted); }
@@ -244,6 +254,9 @@
     <main>
         @if(session('success'))
             <div class="flash-success">✓ {{ session('success') }}</div>
+        @endif
+        @if(session('error'))
+            <div class="flash-error">⚠ {{ session('error') }}</div>
         @endif
 
         @yield('content')

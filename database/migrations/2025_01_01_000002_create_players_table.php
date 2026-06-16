@@ -14,6 +14,11 @@ return new class extends Migration
             $table->string('name');
             $table->string('role')->nullable(); // Werewolf, Villager, Seer, Doctor
             $table->boolean('is_alive')->default(true);
+            $table->boolean('is_bot')->default(false);
+            $table->string('token')->nullable();
+            $table->unsignedBigInteger('night_vote_target_id')->nullable();
+            $table->unsignedBigInteger('day_vote_target_id')->nullable();
+            $table->boolean('has_peeked')->default(false);
             $table->timestamps();
         });
     }

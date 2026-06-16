@@ -4,30 +4,98 @@
 
 @section('content')
 <style>
+    /* ── Full-page day/night theme ── */
+    body {
+        transition: background-color .8s ease, color .4s ease;
+    }
+
+    /* Night theme (default dark) — no override needed, uses existing vars */
+
+    /* Day theme — warm light wash over everything */
+    body.phase-is-day {
+        background-color: #fdf6e3 !important;
+        color: #2d2a1e !important;
+    }
+
+    body.phase-is-day var(--bg2),
+    body.phase-is-day .stat,
+    body.phase-is-day .action-section,
+    body.phase-is-day .player-card,
+    body.phase-is-day .chat-panel,
+    body.phase-is-day .gm-bar {
+        background: rgba(255,255,255,0.6) !important;
+        border-color: rgba(217,119,6,0.2) !important;
+    }
+
+    body.phase-is-day .stat,
+    body.phase-is-day .action-section,
+    body.phase-is-day .player-card,
+    body.phase-is-day .chat-panel,
+    body.phase-is-day .gm-bar {
+        background: rgba(255,255,255,0.7);
+        border-color: rgba(217,119,6,0.25);
+        color: #2d2a1e;
+    }
+
+    body.phase-is-day .pn,
+    body.phase-is-day .phase-sub,
+    body.phase-is-day .tally-note,
+    body.phase-is-day .chat-header,
+    body.phase-is-day .section-title {
+        color: #7a6540 !important;
+    }
+
+    body.phase-is-day .chat-input-row input {
+        background: #fff8ed;
+        border-color: rgba(217,119,6,0.3);
+        color: #2d2a1e;
+    }
+
+    body.phase-is-day .chat-msg { color: #3d3520; }
+    body.phase-is-day .chat-msg.system { color: #9a845a; }
+
     /* ── Phase header ── */
     .phase-header {
         text-align: center;
-        padding: 1.2rem 1rem 1rem;
+        padding: 1.5rem 1rem 1.2rem;
         border-radius: var(--radius);
         margin-bottom: 1.5rem;
+        transition: background .8s ease, border-color .8s ease;
     }
 
-    .phase-night { background: rgba(79,70,229,0.1);   border: 1px solid rgba(79,70,229,0.25); }
-    .phase-day   { background: rgba(255,209,102,0.08); border: 1px solid rgba(217,119,6,0.25); }
+    .phase-night { background: rgba(79,70,229,0.12);   border: 1px solid rgba(79,70,229,0.3); }
+    .phase-day   { background: rgba(255,209,102,0.18); border: 1px solid rgba(217,119,6,0.4); }
     .phase-fin   { background: rgba(45,206,137,0.08);  border: 1px solid rgba(45,206,137,0.25); }
 
     .phase-label { font-size: 1.6rem; font-weight: 900; }
     .phase-sub   { color: var(--muted); margin-top: .25rem; font-size: .9rem; font-weight: 600; }
 
-    /* ── Countdown timer ── */
+    /* ── Countdown timer — big, always visible ── */
     .phase-timer {
-        font-size: 1.1rem;
+        display: inline-block;
+        font-size: 2.4rem;
         font-weight: 900;
-        margin-top: .4rem;
-        letter-spacing: .04em;
+        margin-top: .6rem;
+        letter-spacing: .06em;
+        font-variant-numeric: tabular-nums;
+        min-width: 110px;
     }
-    .timer-low { color: var(--red) !important; animation: pulse 1s infinite; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+    .phase-night .phase-timer { color: #a5b4fc; }  /* soft indigo for night */
+    .phase-day   .phase-timer { color: #d97706; }  /* amber for day */
+
+    .timer-low { color: var(--red) !important; animation: pulse .8s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    .timer-label {
+        display: block;
+        font-size: .7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .1em;
+        opacity: .55;
+        margin-top: .1rem;
+    }
 
     /* ── Stats row ── */
     .stats { display: flex; gap: .75rem; margin-bottom: 1.2rem; flex-wrap: wrap; }
@@ -319,6 +387,11 @@
     $disconnectThreshold = now()->subSeconds(20);
 @endphp
 
+{{-- Apply day/night body class immediately so there's no flash --}}
+<script>
+    document.body.classList.add('{{ $phase === "day" && $status === "in_progress" ? "phase-is-day" : "phase-is-night" }}');
+</script>
+
 {{-- Phase header with countdown --}}
 @if($status === 'finished')
     @php $winner = $game->checkWinner() ?? ($wolves === 0 ? 'villagers' : 'werewolves'); @endphp
@@ -331,7 +404,7 @@
         <div class="phase-label">{{ $phase === 'night' ? '🌙 Night' : '☀️ Day' }} — Round {{ $game->round }}</div>
         <div class="phase-sub">{{ $game->name }}</div>
         @if($game->phase_ends_at && $status === 'in_progress')
-            <div class="phase-timer" id="phase-timer">⏱ --:--</div>
+            <div class="phase-timer" id="phase-timer">--:--<span class="timer-label">time remaining</span></div>
         @endif
     </div>
 @endif
@@ -640,12 +713,13 @@
         const ss   = String(diff % 60).padStart(2, '0');
 
         if (timerEl) {
-            timerEl.textContent = `⏱ ${mm}:${ss}`;
+            // Keep the label span, only update the text node before it
+            const label = timerEl.querySelector('.timer-label');
+            timerEl.childNodes[0].textContent = `${mm}:${ss}`;
             timerEl.classList.toggle('timer-low', diff <= 10);
         }
 
         if (diff <= 0) {
-            // Timer expired — trigger page reload to let the server auto-advance
             clearInterval(interval);
             window.location.reload();
         }

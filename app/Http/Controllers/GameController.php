@@ -4,14 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\Game;
 use App\Models\Player;
+use App\Models\ChatMessage;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\View\View;
 
 class GameController extends Controller
 {
-    // ── Bot names pool ────────────────────────────────────────────────────────
+    // ── Phase duration (seconds) ───────────────────────────────────────────────
+    private const PHASE_DURATION = 90; // seconds per phase
 
+    // ── Bot names pool ────────────────────────────────────────────────────────
     private const BOT_NAMES = [
         'Shadow', 'Raven', 'Hunter', 'Blaze', 'Frost',
         'Viper', 'Ghost', 'Storm', 'Ember', 'Claw',
@@ -155,6 +159,7 @@ class GameController extends Controller
             'name'     => $name,
             'is_alive' => true,
             'is_bot'   => false,
+            'last_seen_at' => now(),
         ]);
 
         session([$this->sessionKey($game->id) => $player->id]);
@@ -199,9 +204,10 @@ class GameController extends Controller
         }
 
         $player = $game->players()->create([
-            'name'     => $name,
-            'is_alive' => true,
-            'is_bot'   => false,
+            'name'         => $name,
+            'is_alive'     => true,
+            'is_bot'       => false,
+            'last_seen_at' => now(),
         ]);
 
         session([$this->sessionKey($game->id) => $player->id]);
@@ -212,7 +218,6 @@ class GameController extends Controller
 
     // ── Bots ──────────────────────────────────────────────────────────────────
 
-    /** Add a number of bots to the lobby */
     public function addBots(Request $request, Game $game): RedirectResponse
     {
         abort_unless(session("gm_{$game->id}"), 403);
@@ -233,7 +238,6 @@ class GameController extends Controller
             return back()->with('error', 'The game is full. No bots could be added.');
         }
 
-        // Pick names that aren't already used
         $usedNames = $game->players()->pluck('name')->map('strtolower')->toArray();
         $pool      = collect(self::BOT_NAMES)
             ->filter(fn($n) => !in_array(strtolower($n), $usedNames))
@@ -254,7 +258,6 @@ class GameController extends Controller
             ->with('success', "{$added} bot(s) added to the lobby.");
     }
 
-    /** Remove all bots from the lobby */
     public function removeBots(Game $game): RedirectResponse
     {
         abort_unless(session("gm_{$game->id}"), 403);
@@ -274,6 +277,8 @@ class GameController extends Controller
 
     public function assignRoles(Request $request, Game $game): RedirectResponse
     {
+        abort_unless(session("gm_{$game->id}"), 403);
+
         $game->load('players');
         $count = $game->players->count();
 
@@ -301,23 +306,29 @@ class GameController extends Controller
 
         $game->update(['status' => 'roles_assigned']);
 
-        // Auto-resolve bot night/day actions for roles assigned phase
-        $this->resolveBotActions($game);
-
         return redirect()->route('games.lobby', $game)
             ->with('success', 'Roles assigned! Players can now see their role.');
     }
 
+    /**
+     * Start the game.
+     * - Host is auto-joined as a player if they have a session player
+     * - Sets phase_ends_at for the first automatic night phase
+     * - Bot night actions fire immediately
+     */
     public function start(Request $request, Game $game): RedirectResponse
     {
+        abort_unless(session("gm_{$game->id}"), 403);
+
         if ($game->status === 'waiting') {
             return back()->with('error', 'Please assign roles first.');
         }
 
         $game->update([
-            'status' => 'in_progress',
-            'phase'  => 'night',
-            'round'  => 1,
+            'status'        => 'in_progress',
+            'phase'         => 'night',
+            'round'         => 1,
+            'phase_ends_at' => now()->addSeconds(self::PHASE_DURATION),
         ]);
 
         $game->players()->update([
@@ -326,84 +337,11 @@ class GameController extends Controller
             'has_peeked'           => false,
         ]);
 
-        // Immediately resolve all bot night actions
         $game->load('players');
         $this->resolveBotNightActions($game);
 
         return redirect()->route('games.play', $game)
             ->with('success', '🌙 Night falls… werewolves, choose your victim.');
-    }
-
-    // ── Bot AI logic ──────────────────────────────────────────────────────────
-
-    /**
-     * Bots auto-vote during the night phase.
-     * Werewolf bots pick a random non-wolf alive player.
-     * Doctor bots protect a random alive player.
-     * Seer bots peek at a random alive non-self player.
-     */
-    private function resolveBotNightActions(Game $game): void
-    {
-        $game->load('players');
-        $alive = $game->players->where('is_alive', true);
-
-        foreach ($alive->where('is_bot', true) as $bot) {
-            switch ($bot->role) {
-                case 'Werewolf':
-                    if ($bot->night_vote_target_id) break;
-                    $targets = $alive->whereNotIn('role', ['Werewolf'])->values();
-                    if ($targets->isEmpty()) break;
-                    $target = $targets->random();
-                    $bot->update(['night_vote_target_id' => $target->id]);
-                    break;
-
-                case 'Doctor':
-                    if ($game->doctor_save_id) break;
-                    $target = $alive->random();
-                    $game->update(['doctor_save_id' => $target->id]);
-                    break;
-
-                case 'Seer':
-                    if ($bot->has_peeked) break;
-                    $targets = $alive->where('id', '!=', $bot->id)->values();
-                    if ($targets->isEmpty()) break;
-                    $target = $targets->random();
-                    $game->update(['seer_peek_id' => $target->id]);
-                    $bot->update(['has_peeked' => true]);
-                    break;
-
-                // Villager bots do nothing at night
-            }
-        }
-
-        // Tally wolf votes now that bots have voted
-        $game->load('players');
-        if ($game->pendingWerewolfVotes() === 0) {
-            $game->update(['night_kill_id' => $game->tallyNightVotes()]);
-        }
-    }
-
-    /**
-     * Bots auto-vote during the day phase — random alive non-self target.
-     */
-    private function resolveBotDayActions(Game $game): void
-    {
-        $game->load('players');
-        $alive = $game->players->where('is_alive', true);
-
-        foreach ($alive->where('is_bot', true) as $bot) {
-            if ($bot->day_vote_target_id) continue;
-            $targets = $alive->where('id', '!=', $bot->id)->values();
-            if ($targets->isEmpty()) continue;
-            $target = $targets->random();
-            $bot->update(['day_vote_target_id' => $target->id]);
-        }
-    }
-
-    /** Called after roles assigned to pre-fill bot state if needed */
-    private function resolveBotActions(Game $game): void
-    {
-        // Nothing needed at roles_assigned phase — bots act when game starts
     }
 
     // ── Role reveal ───────────────────────────────────────────────────────────
@@ -429,7 +367,48 @@ class GameController extends Controller
         $myPlayer = $this->sessionPlayer($game);
         $isGM     = session("gm_{$game->id}", false);
 
-        return view('games.play', compact('game', 'myPlayer', 'isGM'));
+        // Auto-advance if the phase timer has expired
+        if ($game->status === 'in_progress' && $game->phase_ends_at && now()->gt($game->phase_ends_at)) {
+            $this->autoAdvancePhase($game);
+            $game->refresh();
+            $game->load('players');
+        }
+
+        // Load chat messages visible to this viewer
+        $chatMessages = $this->getChatMessages($game, $myPlayer);
+
+        return view('games.play', compact('game', 'myPlayer', 'isGM', 'chatMessages'));
+    }
+
+    // ── Heartbeat (called by JS every 10 seconds) ─────────────────────────────
+
+    public function heartbeat(Request $request, Game $game): JsonResponse
+    {
+        $game->load('players');
+        $player = $this->sessionPlayer($game);
+
+        if ($player) {
+            $player->update(['last_seen_at' => now()]);
+        }
+
+        // Return minimal state for the JS timer
+        return response()->json([
+            'phase_ends_at' => $game->phase_ends_at?->toIso8601String(),
+            'phase'         => $game->phase,
+            'round'         => $game->round,
+            'status'        => $game->status,
+        ]);
+    }
+
+    // ── Auto-advance phase ────────────────────────────────────────────────────
+
+    private function autoAdvancePhase(Game $game): void
+    {
+        if ($game->phase === 'night') {
+            $this->performNightResolution($game);
+        } else {
+            $this->performDayResolution($game);
+        }
     }
 
     // ── Night actions ─────────────────────────────────────────────────────────
@@ -480,6 +459,10 @@ class GameController extends Controller
             ->with('success', '💊 Protection granted.');
     }
 
+    /**
+     * Seer peeks at a player.
+     * Writes a 'seer' channel chat message so the result persists across refreshes.
+     */
     public function seerPeek(Request $request, Game $game): RedirectResponse
     {
         $request->validate(['target_id' => 'required|integer']);
@@ -502,8 +485,87 @@ class GameController extends Controller
         $game->update(['seer_peek_id' => $target->id]);
         $seer->update(['has_peeked' => true]);
 
+        // Write a seer-channel chat message so the result is visible only to the Seer
+        // across future refreshes for this round, and includes the role icon hint.
+        ChatMessage::create([
+            'game_id'     => $game->id,
+            'player_id'   => $seer->id,
+            'player_name' => $seer->name,
+            'channel'     => 'seer',
+            'round'       => $game->round,
+            'message'     => "🔮 Your vision reveals: **{$target->name}** is a **{$target->role}**!|icon:{$target->role}",
+        ]);
+
         return redirect()->route('games.play', $game)
             ->with('peek_result', "🔮 {$target->name} is a {$target->role}!");
+    }
+
+    // ── Chat ──────────────────────────────────────────────────────────────────
+
+    public function sendChat(Request $request, Game $game): RedirectResponse
+    {
+        $game->load('players');
+        $player = $this->sessionPlayer($game);
+
+        if (!$player || !$player->is_alive || $game->status !== 'in_progress') {
+            return back()->with('error', 'You cannot chat right now.');
+        }
+
+        $data = $request->validate([
+            'message' => ['required', 'string', 'min:1', 'max:300'],
+        ]);
+
+        // Determine channel
+        if ($game->phase === 'night' && $player->role === 'Werewolf') {
+            $channel = 'night';
+        } elseif ($game->phase === 'day') {
+            $channel = 'day';
+        } else {
+            return back()->with('error', 'Chat is not available for your role right now.');
+        }
+
+        ChatMessage::create([
+            'game_id'     => $game->id,
+            'player_id'   => $player->id,
+            'player_name' => $player->name,
+            'channel'     => $channel,
+            'round'       => $game->round,
+            'message'     => trim($data['message']),
+        ]);
+
+        return redirect()->route('games.play', $game);
+    }
+
+    /**
+     * Return chat messages visible to this viewer:
+     * - day messages: everyone
+     * - night messages: only werewolves
+     * - seer messages: only the seer (their own peek results)
+     */
+    private function getChatMessages(Game $game, ?Player $myPlayer): \Illuminate\Support\Collection
+    {
+        if (!$myPlayer) {
+            // Spectator: only see day chat
+            return ChatMessage::where('game_id', $game->id)
+                ->where('channel', 'day')
+                ->orderBy('created_at')
+                ->get();
+        }
+
+        $channels = ['day'];
+
+        if ($myPlayer->role === 'Werewolf') {
+            $channels[] = 'night';
+        }
+
+        if ($myPlayer->role === 'Seer') {
+            $channels[] = 'seer';
+        }
+
+        return ChatMessage::where('game_id', $game->id)
+            ->whereIn('channel', $channels)
+            ->orderBy('created_at')
+            ->get();
     }
 
     // ── Phase transitions ─────────────────────────────────────────────────────
@@ -511,12 +573,18 @@ class GameController extends Controller
     public function resolveNight(Request $request, Game $game): RedirectResponse
     {
         abort_unless(session("gm_{$game->id}"), 403);
+        $game->load('players');
+        $this->performNightResolution($game);
+        return redirect()->route('games.play', $game);
+    }
 
+    private function performNightResolution(Game $game): void
+    {
         $game->load('players');
 
-        $killId = $game->night_kill_id;
-        $saveId = $game->doctor_save_id;
-        $killed = null;
+        $killId  = $game->night_kill_id;
+        $saveId  = $game->doctor_save_id;
+        $killed  = null;
 
         if ($killId && $killId !== $saveId) {
             $killed = $game->players->firstWhere('id', $killId);
@@ -534,25 +602,31 @@ class GameController extends Controller
             'night_kill_id'  => null,
             'doctor_save_id' => null,
             'seer_peek_id'   => null,
+            'phase_ends_at'  => now()->addSeconds(self::PHASE_DURATION),
         ]);
 
         $game->load('players');
 
-        $winner = $game->checkWinner();
-        if ($winner) {
-            $game->update(['status' => 'finished']);
-            $label = $winner === 'villagers' ? '🎉 Villagers win!' : '🐺 Werewolves win!';
-            return redirect()->route('games.play', $game)->with('success', $label);
+        if ($game->checkWinner()) {
+            $game->update(['status' => 'finished', 'phase_ends_at' => null]);
+            return;
         }
 
-        // Bots vote immediately at day start
-        $this->resolveBotDayActions($game);
-
+        // Write a day-channel system message announcing the night result
         $msg = $killed
-            ? "☀️ Day breaks… {$killed->name} was killed in the night."
+            ? "☀️ Day breaks… **{$killed->name}** was killed in the night."
             : "☀️ Day breaks… nobody died! (Doctor saved someone)";
 
-        return redirect()->route('games.play', $game)->with('success', $msg);
+        ChatMessage::create([
+            'game_id'     => $game->id,
+            'player_id'   => $game->players->first()->id, // system uses first player slot
+            'player_name' => '📢 Game',
+            'channel'     => 'day',
+            'round'       => $game->round,
+            'message'     => $msg,
+        ]);
+
+        $this->resolveBotDayActions($game);
     }
 
     public function dayVote(Request $request, Game $game): RedirectResponse
@@ -579,7 +653,8 @@ class GameController extends Controller
         $game->load('players');
 
         if ($game->pendingDayVotes() === 0) {
-            return $this->resolveDay($game);
+            $this->performDayResolution($game);
+            return redirect()->route('games.play', $game);
         }
 
         return redirect()->route('games.play', $game)
@@ -589,10 +664,12 @@ class GameController extends Controller
     public function resolveDayManual(Request $request, Game $game): RedirectResponse
     {
         abort_unless(session("gm_{$game->id}"), 403);
-        return $this->resolveDay($game);
+        $game->load('players');
+        $this->performDayResolution($game);
+        return redirect()->route('games.play', $game);
     }
 
-    private function resolveDay(Game $game): RedirectResponse
+    private function performDayResolution(Game $game): void
     {
         $game->load('players');
         $eliminatedId = $game->tallyDayVotes();
@@ -610,27 +687,92 @@ class GameController extends Controller
         ]);
 
         $game->update([
-            'phase' => 'night',
-            'round' => $game->round + 1,
+            'phase'         => 'night',
+            'round'         => $game->round + 1,
+            'phase_ends_at' => now()->addSeconds(self::PHASE_DURATION),
         ]);
 
         $game->load('players');
 
-        $winner = $game->checkWinner();
-        if ($winner) {
-            $game->update(['status' => 'finished']);
-            $label = $winner === 'villagers' ? '🎉 Villagers win!' : '🐺 Werewolves win!';
-            return redirect()->route('games.play', $game)->with('success', $label);
+        if ($game->checkWinner()) {
+            $game->update(['status' => 'finished', 'phase_ends_at' => null]);
+            return;
         }
 
-        // Bots act immediately at night start
-        $this->resolveBotNightActions($game);
-
+        // Write a night-channel system message announcing the day result
         $msg = $eliminated
-            ? "🌙 Night falls… {$eliminated->name} was eliminated by the village."
+            ? "🌙 Night falls… **{$eliminated->name}** was eliminated by the village."
             : "🌙 Night falls… the vote was tied — nobody was eliminated.";
 
-        return redirect()->route('games.play', $game)->with('success', $msg);
+        ChatMessage::create([
+            'game_id'     => $game->id,
+            'player_id'   => $game->players->first()->id,
+            'player_name' => '📢 Game',
+            'channel'     => 'day', // day channel so everyone sees the outcome
+            'round'       => $game->round,
+            'message'     => $msg,
+        ]);
+
+        $this->resolveBotNightActions($game);
+    }
+
+    // ── Bot AI logic ──────────────────────────────────────────────────────────
+
+    private function resolveBotNightActions(Game $game): void
+    {
+        $game->load('players');
+        $alive = $game->players->where('is_alive', true);
+
+        foreach ($alive->where('is_bot', true) as $bot) {
+            switch ($bot->role) {
+                case 'Werewolf':
+                    if ($bot->night_vote_target_id) break;
+                    $targets = $alive->whereNotIn('role', ['Werewolf'])->values();
+                    if ($targets->isEmpty()) break;
+                    $target = $targets->random();
+                    $bot->update(['night_vote_target_id' => $target->id]);
+                    break;
+
+                case 'Doctor':
+                    if ($game->doctor_save_id) break;
+                    $target = $alive->random();
+                    $game->update(['doctor_save_id' => $target->id]);
+                    break;
+
+                case 'Seer':
+                    if ($bot->has_peeked) break;
+                    $targets = $alive->where('id', '!=', $bot->id)->values();
+                    if ($targets->isEmpty()) break;
+                    $target = $targets->random();
+                    $game->update(['seer_peek_id' => $target->id]);
+                    $bot->update(['has_peeked' => true]);
+                    break;
+            }
+        }
+
+        $game->load('players');
+        if ($game->pendingWerewolfVotes() === 0) {
+            $game->update(['night_kill_id' => $game->tallyNightVotes()]);
+        }
+    }
+
+    private function resolveBotDayActions(Game $game): void
+    {
+        $game->load('players');
+        $alive = $game->players->where('is_alive', true);
+
+        foreach ($alive->where('is_bot', true) as $bot) {
+            if ($bot->day_vote_target_id) continue;
+            $targets = $alive->where('id', '!=', $bot->id)->values();
+            if ($targets->isEmpty()) continue;
+            $target = $targets->random();
+            $bot->update(['day_vote_target_id' => $target->id]);
+        }
+    }
+
+    private function resolveBotActions(Game $game): void
+    {
+        // Nothing needed at roles_assigned phase
     }
 
     // ── Show / legacy ─────────────────────────────────────────────────────────

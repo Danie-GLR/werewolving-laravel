@@ -12,12 +12,22 @@
         margin-bottom: 1.5rem;
     }
 
-    .phase-night  { background: rgba(79,70,229,0.1);  border: 1px solid rgba(79,70,229,0.25); }
-    .phase-day    { background: rgba(255,209,102,0.08); border: 1px solid rgba(217,119,6,0.25); }
-    .phase-fin    { background: rgba(45,206,137,0.08); border: 1px solid rgba(45,206,137,0.25); }
+    .phase-night { background: rgba(79,70,229,0.1);   border: 1px solid rgba(79,70,229,0.25); }
+    .phase-day   { background: rgba(255,209,102,0.08); border: 1px solid rgba(217,119,6,0.25); }
+    .phase-fin   { background: rgba(45,206,137,0.08);  border: 1px solid rgba(45,206,137,0.25); }
 
     .phase-label { font-size: 1.6rem; font-weight: 900; }
     .phase-sub   { color: var(--muted); margin-top: .25rem; font-size: .9rem; font-weight: 600; }
+
+    /* ── Countdown timer ── */
+    .phase-timer {
+        font-size: 1.1rem;
+        font-weight: 900;
+        margin-top: .4rem;
+        letter-spacing: .04em;
+    }
+    .timer-low { color: var(--red) !important; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
 
     /* ── Stats row ── */
     .stats { display: flex; gap: .75rem; margin-bottom: 1.2rem; flex-wrap: wrap; }
@@ -45,36 +55,20 @@
         overflow: hidden;
     }
 
-    .role-card::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        opacity: .06;
-        background-size: cover;
-        background-position: center;
-        pointer-events: none;
-    }
-
-    .role-Werewolf { background: rgba(233,69,96,0.1);  border: 2px solid rgba(233,69,96,0.35); }
+    .role-Werewolf { background: rgba(233,69,96,0.1);   border: 2px solid rgba(233,69,96,0.35); }
     .role-Villager { background: rgba(45,206,137,0.08); border: 2px solid rgba(45,206,137,0.3); }
     .role-Seer     { background: rgba(168,85,247,0.1);  border: 2px solid rgba(168,85,247,0.3); }
     .role-Doctor   { background: rgba(59,130,246,0.08); border: 2px solid rgba(59,130,246,0.3); }
 
     .role-card-img {
-        width: 100px;
-        height: 100px;
+        width: 100px; height: 100px;
         object-fit: contain;
         filter: drop-shadow(0 6px 20px rgba(0,0,0,0.5));
         margin-bottom: .75rem;
     }
 
-    .role-title {
-        font-size: 1.3rem;
-        font-weight: 900;
-        margin-bottom: .5rem;
-    }
-
-    .role-desc { color: var(--muted); font-size: .9rem; line-height: 1.6; font-weight: 600; }
+    .role-title { font-size: 1.3rem; font-weight: 900; margin-bottom: .5rem; }
+    .role-desc  { color: var(--muted); font-size: .9rem; line-height: 1.6; font-weight: 600; }
 
     /* ── Action section ── */
     .action-section {
@@ -120,6 +114,7 @@
         padding: .9rem .6rem;
         text-align: center;
         transition: border-color .2s;
+        position: relative;
     }
 
     .player-card:hover { border-color: rgba(255,61,127,0.3); }
@@ -128,6 +123,16 @@
     .player-card .av { font-size: 1.6rem; margin-bottom: .35rem; }
     .player-card .av img { width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4)); }
     .player-card .pn { font-size: .8rem; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* disconnected badge */
+    .away-badge {
+        font-size: .6rem;
+        color: var(--muted);
+        font-weight: 700;
+        display: block;
+        margin-top: .15rem;
+        opacity: .7;
+    }
 
     .you-dot {
         width: 6px; height: 6px;
@@ -188,6 +193,97 @@
         margin-top: 1.5rem;
     }
 
+    /* ── Chat ── */
+    .chat-panel {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        margin-top: 1.5rem;
+        overflow: hidden;
+    }
+
+    .chat-header {
+        padding: .75rem 1rem;
+        font-size: .82rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .07em;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+    }
+
+    .chat-messages {
+        height: 220px;
+        overflow-y: auto;
+        padding: .75rem 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: .5rem;
+    }
+
+    .chat-msg {
+        font-size: .84rem;
+        font-weight: 600;
+        line-height: 1.45;
+    }
+
+    .chat-msg .sender {
+        font-weight: 900;
+        margin-right: .35rem;
+    }
+
+    .chat-msg.system   { color: var(--muted); font-style: italic; }
+    .chat-msg.wolf     { color: #fca5a5; }
+    .chat-msg.seer-msg { color: #e9d5ff; }
+
+    .chat-msg .role-icon {
+        width: 18px; height: 18px;
+        object-fit: contain;
+        vertical-align: middle;
+        margin-left: .25rem;
+        filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
+    }
+
+    .chat-input-row {
+        display: flex;
+        gap: .5rem;
+        padding: .75rem 1rem;
+        border-top: 1px solid var(--border);
+    }
+
+    .chat-input-row input {
+        flex: 1;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: .45rem .9rem;
+        color: var(--text);
+        font-family: 'Nunito', sans-serif;
+        font-size: .88rem;
+        font-weight: 600;
+        outline: none;
+    }
+
+    .chat-input-row input:focus { border-color: var(--pink); }
+
+    .chat-send-btn {
+        background: var(--pink);
+        border: none;
+        border-radius: 20px;
+        color: #fff;
+        padding: .45rem .9rem;
+        font-family: 'Nunito', sans-serif;
+        font-weight: 800;
+        font-size: .85rem;
+        cursor: pointer;
+        transition: opacity .2s;
+    }
+
+    .chat-send-btn:hover { opacity: .85; }
+
     .refresh-note {
         text-align: center;
         color: rgba(155,135,184,0.35);
@@ -218,9 +314,12 @@
     $village = $alive->whereNotIn('role',['Werewolf'])->count();
     $phase   = $game->phase;
     $status  = $game->status;
+
+    // Disconnected threshold: 20 seconds without a heartbeat
+    $disconnectThreshold = now()->subSeconds(20);
 @endphp
 
-{{-- Phase header --}}
+{{-- Phase header with countdown --}}
 @if($status === 'finished')
     @php $winner = $game->checkWinner() ?? ($wolves === 0 ? 'villagers' : 'werewolves'); @endphp
     <div class="phase-header phase-fin">
@@ -231,6 +330,9 @@
     <div class="phase-header {{ $phase === 'night' ? 'phase-night' : 'phase-day' }}">
         <div class="phase-label">{{ $phase === 'night' ? '🌙 Night' : '☀️ Day' }} — Round {{ $game->round }}</div>
         <div class="phase-sub">{{ $game->name }}</div>
+        @if($game->phase_ends_at && $status === 'in_progress')
+            <div class="phase-timer" id="phase-timer">⏱ --:--</div>
+        @endif
     </div>
 @endif
 
@@ -249,7 +351,7 @@
             @php $pendingW = $game->pendingWerewolfVotes(); @endphp
             <form method="POST" action="{{ route('games.resolve-night', $game) }}">
                 @csrf
-                <button type="submit" class="btn-yellow">☀️ Resolve Night</button>
+                <button type="submit" class="btn-yellow">☀️ Force Day</button>
             </form>
             <span class="tally-note">
                 🐺 {{ $wolves - $pendingW }}/{{ $wolves }} wolves voted
@@ -260,14 +362,14 @@
             @php $pendingD = $game->pendingDayVotes(); @endphp
             <form method="POST" action="{{ route('games.resolve-day', $game) }}">
                 @csrf
-                <button type="submit" class="btn-yellow">🌙 Resolve Day (force)</button>
+                <button type="submit" class="btn-yellow">🌙 Force Night</button>
             </form>
             <span class="tally-note">☀️ {{ $alive->count() - $pendingD }}/{{ $alive->count() }} voted</span>
         @endif
     </div>
 @endif
 
-{{-- Role card --}}
+{{-- Role card — shown only to the actual player; GM/spectators see nothing here --}}
 @if($myPlayer)
     <div class="role-card role-{{ $myPlayer->role ?? 'Villager' }}">
         <img src="{{ roleImg($myPlayer->role) }}" alt="{{ $myPlayer->role }}" class="role-card-img">
@@ -394,37 +496,189 @@
 @endif
 
 {{-- Player grid --}}
+{{--
+    Role visibility rules:
+    - Finished game: show everyone's real role icon + chip
+    - Your own card: show your real role icon
+    - Werewolf viewing another wolf: show wolf icon
+    - Seer viewing a peeked player (this round): show their real icon (visual hint)
+    - Everyone else: show 👤 / 💀 — NO role information
+    - GM and spectators: same as "everyone else" — they cannot see roles
+--}}
 <div class="section-title">Players</div>
 <div class="player-grid">
     @foreach($game->players as $p)
+        @php
+            $isMe     = $myPlayer && $myPlayer->id === $p->id;
+            $isFellow = $myPlayer && $myPlayer->role === 'Werewolf' && $p->role === 'Werewolf' && !$isMe;
+
+            // Seer: show icon only for the player peeked THIS round
+            $seerPeeked = $myPlayer
+                && $myPlayer->role === 'Seer'
+                && $game->seer_peek_id == $p->id
+                && $p->is_alive;
+
+            $showRealIcon = $status === 'finished' || $isMe || $isFellow || $seerPeeked;
+
+            // Disconnected: no heartbeat in last 20 seconds (bots are always "online")
+            $isAway = !$p->is_bot
+                && $p->last_seen_at
+                && $p->last_seen_at->lt($disconnectThreshold);
+        @endphp
         <div class="player-card {{ !$p->is_alive ? 'dead' : '' }}">
             <div class="av">
-                @if($status === 'finished' || ($myPlayer && $myPlayer->id === $p->id))
+                @if($showRealIcon)
                     <img src="{{ roleImg($p->role) }}" alt="{{ $p->role }}">
-                @elseif($myPlayer && $myPlayer->role === 'Werewolf' && $p->role === 'Werewolf')
-                    <img src="{{ asset('images/icon_werewolf.png') }}" alt="Werewolf">
                 @else
                     {{ $p->is_alive ? '👤' : '💀' }}
                 @endif
             </div>
             <div class="pn">
                 {{ $p->name }}
-                @if($myPlayer && $myPlayer->id === $p->id)
+                @if($isMe)
                     <span class="you-dot" title="you"></span>
                 @endif
             </div>
             @if($status === 'finished')
                 <span class="role-chip role-{{ $p->role }}">{{ $p->role }}</span>
+            @elseif($seerPeeked)
+                {{-- Seer only: show the role chip for the peeked player --}}
+                <span class="role-chip role-{{ $p->role }}">{{ $p->role }}</span>
             @endif
             @if(!$p->is_alive)
                 <div style="font-size:.65rem; color:var(--red); margin-top:.2rem; font-weight:800;">☠️ Out</div>
+            @endif
+            @if($isAway && $p->is_alive)
+                <span class="away-badge">(disconnected)</span>
             @endif
         </div>
     @endforeach
 </div>
 
+{{-- Chat panel --}}
+@if($status === 'in_progress' || $status === 'finished')
+@php
+    // Determine chat channel label for this viewer
+    $canChat = $myPlayer && $myPlayer->is_alive && $status === 'in_progress';
+    $chatLabel = '💬 Day Chat';
+    if ($myPlayer && $myPlayer->role === 'Werewolf' && $phase === 'night') {
+        $chatLabel = '🐺 Wolf Pack (night only)';
+    } elseif ($myPlayer && $myPlayer->role === 'Seer') {
+        $chatLabel = '💬 Day Chat · 🔮 Seer Visions';
+    } elseif ($phase === 'night' && $myPlayer && $myPlayer->role !== 'Werewolf') {
+        $chatLabel = '💬 Chat (day only)';
+        $canChat = false; // villagers/doctor/seer can't chat at night
+    }
+@endphp
+<div class="chat-panel">
+    <div class="chat-header">{{ $chatLabel }}</div>
+    <div class="chat-messages" id="chat-scroll">
+        @forelse($chatMessages as $cm)
+            @php
+                $isSeerMsg  = $cm->channel === 'seer';
+                $isWolfMsg  = $cm->channel === 'night';
+                $isSystem   = $cm->player_name === '📢 Game';
+
+                // Parse seer messages: format is "text|icon:Role"
+                $msgText = $cm->message;
+                $msgIcon = null;
+                if ($isSeerMsg && str_contains($cm->message, '|icon:')) {
+                    [$msgText, $iconPart] = explode('|icon:', $cm->message, 2);
+                    $msgIcon = trim($iconPart);
+                }
+                // Convert **bold** markdown to <strong>
+                $msgText = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', e($msgText));
+            @endphp
+            <div class="chat-msg {{ $isSeerMsg ? 'seer-msg' : ($isWolfMsg ? 'wolf' : ($isSystem ? 'system' : '')) }}">
+                @if(!$isSystem)
+                    <span class="sender">{{ $cm->player_name }}:</span>
+                @endif
+                {!! $msgText !!}
+                @if($msgIcon)
+                    <img src="{{ roleImg($msgIcon) }}" alt="{{ $msgIcon }}" class="role-icon">
+                @endif
+                @if($isWolfMsg)
+                    <span style="font-size:.7rem; opacity:.5; margin-left:.3rem;">(wolf chat)</span>
+                @endif
+            </div>
+        @empty
+            <div class="chat-msg system">No messages yet…</div>
+        @endforelse
+    </div>
+    @if($canChat)
+        <form method="POST" action="{{ route('games.chat', $game) }}" class="chat-input-row" id="chat-form">
+            @csrf
+            <input type="text" name="message" placeholder="Say something…" maxlength="300" autocomplete="off" id="chat-input">
+            <button type="submit" class="chat-send-btn">Send</button>
+        </form>
+    @elseif(!$myPlayer)
+        <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">Spectating — chat is read-only.</div>
+    @elseif(!$myPlayer->is_alive)
+        <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">You've been eliminated — chat is read-only.</div>
+    @else
+        <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">Chat opens during the day phase.</div>
+    @endif
+</div>
+@endif
+
 @if($status === 'in_progress')
     <meta http-equiv="refresh" content="6">
-    <p class="refresh-note">Refreshes every 6 seconds</p>
+    <p class="refresh-note">Auto-refreshes every 6 s</p>
 @endif
+
+{{-- ── JS: countdown timer + heartbeat ── --}}
+@if($status === 'in_progress' && $game->phase_ends_at)
+<script>
+(function () {
+    // ── Countdown ──────────────────────────────────────────────────────────────
+    const timerEl  = document.getElementById('phase-timer');
+    const endsAt   = new Date("{{ $game->phase_ends_at->toIso8601String() }}");
+
+    function tick() {
+        const diff = Math.max(0, Math.floor((endsAt - Date.now()) / 1000));
+        const mm   = String(Math.floor(diff / 60)).padStart(2, '0');
+        const ss   = String(diff % 60).padStart(2, '0');
+
+        if (timerEl) {
+            timerEl.textContent = `⏱ ${mm}:${ss}`;
+            timerEl.classList.toggle('timer-low', diff <= 10);
+        }
+
+        if (diff <= 0) {
+            // Timer expired — trigger page reload to let the server auto-advance
+            clearInterval(interval);
+            window.location.reload();
+        }
+    }
+
+    tick();
+    const interval = setInterval(tick, 1000);
+
+    // ── Heartbeat ─────────────────────────────────────────────────────────────
+    // Pings the server every 10 s so last_seen_at stays fresh
+    @if($myPlayer)
+    setInterval(function () {
+        fetch("{{ route('games.heartbeat', $game) }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+            },
+        }).catch(() => {}); // silently ignore network errors
+    }, 10000);
+    @endif
+
+    // ── Chat scroll to bottom ─────────────────────────────────────────────────
+    const chatScroll = document.getElementById('chat-scroll');
+    if (chatScroll) chatScroll.scrollTop = chatScroll.scrollHeight;
+})();
+</script>
+@else
+<script>
+    // Scroll chat to bottom even when game is finished / no timer
+    const chatScroll = document.getElementById('chat-scroll');
+    if (chatScroll) chatScroll.scrollTop = chatScroll.scrollHeight;
+</script>
+@endif
+
 @endsection

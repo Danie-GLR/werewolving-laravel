@@ -12,8 +12,12 @@ return new class extends Migration
             $table->id();
             $table->foreignId('game_id')->constrained()->cascadeOnDelete();
             $table->foreignId('player_id')->constrained()->cascadeOnDelete();
-            $table->string('player_name');       // denormalised for speed
-            $table->enum('channel', ['day', 'night']); // day = all players, night = werewolves only
+            $table->string('player_name');           // denormalised for speed
+            $table->enum('channel', [
+                'day',    // all alive players + spectators see this
+                'night',  // werewolves only
+                'seer',   // seer only — peek results written here
+            ]);
             $table->unsignedInteger('round');
             $table->text('message');
             $table->timestamps();

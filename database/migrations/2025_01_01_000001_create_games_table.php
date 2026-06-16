@@ -12,6 +12,11 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('status')->default('waiting'); // waiting, roles_assigned, in_progress, finished
+            $table->string('phase')->default('night');    // night | day
+            $table->unsignedInteger('round')->default(1);
+            $table->unsignedBigInteger('night_kill_id')->nullable();
+            $table->unsignedBigInteger('doctor_save_id')->nullable();
+            $table->unsignedBigInteger('seer_peek_id')->nullable();
             $table->timestamps();
         });
     }

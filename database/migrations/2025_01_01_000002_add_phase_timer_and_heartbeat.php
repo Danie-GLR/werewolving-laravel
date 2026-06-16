@@ -8,25 +8,21 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('games', function (Blueprint $table) {
-            // When the current phase automatically ends (null = no auto-advance)
-            $table->timestamp('phase_ends_at')->nullable()->after('round');
-        });
-
-        Schema::table('players', function (Blueprint $table) {
-            // Last heartbeat ping — used to show (away) indicator
-            $table->timestamp('last_seen_at')->nullable()->after('has_peeked');
-        });
+        // Add last_seen_at to players (for disconnected indicator)
+        // phase_ends_at on games was already added by a prior migration — skip it
+        if (Schema::hasTable('players') && !Schema::hasColumn('players', 'last_seen_at')) {
+            Schema::table('players', function (Blueprint $table) {
+                $table->timestamp('last_seen_at')->nullable()->after('has_peeked');
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('games', function (Blueprint $table) {
-            $table->dropColumn('phase_ends_at');
-        });
-
-        Schema::table('players', function (Blueprint $table) {
-            $table->dropColumn('last_seen_at');
-        });
+        if (Schema::hasColumn('players', 'last_seen_at')) {
+            Schema::table('players', function (Blueprint $table) {
+                $table->dropColumn('last_seen_at');
+            });
+        }
     }
 };

@@ -2,15 +2,23 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ChatMessage;
 use App\Models\Game;
 use App\Models\Player;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\View\View;
 
 class GameController extends Controller
 {
-    // ── Session helper ────────────────────────────────────────────────────────
+    // ── Bot names pool ────────────────────────────────────────────────────────
+
+    private const BOT_NAMES = [
+        'Shadow', 'Raven', 'Hunter', 'Blaze', 'Frost',
+        'Viper', 'Ghost', 'Storm', 'Ember', 'Claw',
+        'Dusk', 'Thorn', 'Sable', 'Flint', 'Hex',
+    ];
+
+    // ── Session helpers ───────────────────────────────────────────────────────
 
     private function sessionKey(int $gameId): string
     {
@@ -26,21 +34,29 @@ class GameController extends Controller
 
     // ── Game list / create ────────────────────────────────────────────────────
 
-    public function index()
+    public function index(): View
     {
         $games = Game::withCount('players')->latest()->get();
         return view('games.index', compact('games'));
     }
 
-    public function create()
+    public function create(): View
     {
         return view('games.create');
     }
 
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:100'],
+            'name' => [
+                'required', 'string', 'min:2', 'max:60',
+                'regex:/^[\w\s\-\'\.]+$/u',
+            ],
+        ], [
+            'name.required' => 'Please give your game a name.',
+            'name.min'      => 'The game name must be at least 2 characters.',
+            'name.max'      => 'The game name cannot be longer than 60 characters.',
+            'name.regex'    => 'The game name can only contain letters, numbers, spaces, and hyphens.',
         ]);
 
         $game = Game::create([
@@ -56,9 +72,50 @@ class GameController extends Controller
             ->with('success', 'Game created! Share this page with your players.');
     }
 
+    // ── Edit / Update / Destroy ───────────────────────────────────────────────
+
+    public function edit(Game $game): View
+    {
+        return view('games.edit', compact('game'));
+    }
+
+    public function update(Request $request, Game $game): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => [
+                'required', 'string', 'min:2', 'max:60',
+                'regex:/^[\w\s\-\'\.]+$/u',
+            ],
+        ], [
+            'name.required' => 'Please enter a game name.',
+            'name.min'      => 'The game name must be at least 2 characters.',
+            'name.max'      => 'The game name cannot be longer than 60 characters.',
+            'name.regex'    => 'The game name can only contain letters, numbers, spaces, and hyphens.',
+        ]);
+
+        $game->update(['name' => $data['name']]);
+
+        return redirect()->route('games.show', $game)
+            ->with('success', 'Game name updated.');
+    }
+
+    public function destroy(Game $game): RedirectResponse
+    {
+        if (!in_array($game->status, ['waiting', 'finished'])) {
+            return redirect()->route('games.show', $game)
+                ->with('error', 'You can only delete a game that is waiting or finished.');
+        }
+
+        $game->players()->delete();
+        $game->delete();
+
+        return redirect()->route('games.index')
+            ->with('success', 'Game deleted.');
+    }
+
     // ── Lobby ─────────────────────────────────────────────────────────────────
 
-    public function lobby(Game $game)
+    public function lobby(Game $game): View
     {
         $game->load('players');
         $myPlayer = $this->sessionPlayer($game);
@@ -67,7 +124,47 @@ class GameController extends Controller
         return view('games.lobby', compact('game', 'myPlayer', 'isGM'));
     }
 
-    public function join(Request $request, Game $game)
+    /** GM joins as a named player */
+    public function gmJoin(Request $request, Game $game): RedirectResponse
+    {
+        abort_unless(session("gm_{$game->id}"), 403);
+
+        if ($game->status !== 'waiting') {
+            return back()->with('error', 'The game has already started.');
+        }
+
+        if ($this->sessionPlayer($game)) {
+            return redirect()->route('games.lobby', $game)
+                ->with('error', 'You are already in this game as a player.');
+        }
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'min:2', 'max:30'],
+        ], [
+            'name.required' => 'Enter your name to join as a player.',
+            'name.min'      => 'Your name must be at least 2 characters.',
+        ]);
+
+        $name = trim($data['name']);
+
+        if ($game->players()->whereRaw('LOWER(name) = ?', [strtolower($name)])->exists()) {
+            return back()->with('error', "The name \"{$name}\" is already taken.");
+        }
+
+        $player = $game->players()->create([
+            'name'     => $name,
+            'is_alive' => true,
+            'is_bot'   => false,
+        ]);
+
+        session([$this->sessionKey($game->id) => $player->id]);
+
+        return redirect()->route('games.lobby', $game)
+            ->with('success', "You joined as a player: {$name}.");
+    }
+
+    /** Player joins from their own device */
+    public function join(Request $request, Game $game): RedirectResponse
     {
         if ($game->status !== 'waiting') {
             return back()->with('error', 'This game has already started.');
@@ -77,20 +174,34 @@ class GameController extends Controller
             return redirect()->route('games.lobby', $game);
         }
 
-        $request->validate([
-            'name' => ['required', 'string', 'max:40'],
+        $data = $request->validate([
+            'name' => [
+                'required', 'string', 'min:2', 'max:30',
+                'regex:/^[\w\s\-\']+$/u',
+            ],
+        ], [
+            'name.required' => 'Please enter your name to join.',
+            'name.min'      => 'Your name must be at least 2 characters.',
+            'name.max'      => 'Your name cannot be longer than 30 characters.',
+            'name.regex'    => 'Your name can only contain letters, numbers, spaces, and hyphens.',
         ]);
 
-        $name = trim($request->name);
+        $name = trim($data['name']);
 
         if ($game->players()->whereRaw('LOWER(name) = ?', [strtolower($name)])->exists()) {
-            return back()->with('error', "The name \"{$name}\" is already taken in this game.");
+            return back()
+                ->withErrors(['name' => "The name \"{$name}\" is already taken. Pick a different one."])
+                ->withInput();
+        }
+
+        if ($game->players()->count() >= 20) {
+            return back()->with('error', 'This game is full (max 20 players).');
         }
 
         $player = $game->players()->create([
             'name'     => $name,
-            'role'     => null,
             'is_alive' => true,
+            'is_bot'   => false,
         ]);
 
         session([$this->sessionKey($game->id) => $player->id]);
@@ -99,15 +210,75 @@ class GameController extends Controller
             ->with('success', "Welcome, {$name}! Wait for the game master to start.");
     }
 
+    // ── Bots ──────────────────────────────────────────────────────────────────
+
+    /** Add a number of bots to the lobby */
+    public function addBots(Request $request, Game $game): RedirectResponse
+    {
+        abort_unless(session("gm_{$game->id}"), 403);
+
+        if ($game->status !== 'waiting') {
+            return back()->with('error', 'You can only add bots while the game is waiting.');
+        }
+
+        $data = $request->validate([
+            'bot_count' => ['required', 'integer', 'min:1', 'max:12'],
+        ]);
+
+        $currentCount = $game->players()->count();
+        $slotsLeft    = 20 - $currentCount;
+        $toAdd        = min((int) $data['bot_count'], $slotsLeft);
+
+        if ($toAdd <= 0) {
+            return back()->with('error', 'The game is full. No bots could be added.');
+        }
+
+        // Pick names that aren't already used
+        $usedNames = $game->players()->pluck('name')->map('strtolower')->toArray();
+        $pool      = collect(self::BOT_NAMES)
+            ->filter(fn($n) => !in_array(strtolower($n), $usedNames))
+            ->shuffle()
+            ->values();
+
+        $added = 0;
+        foreach ($pool->take($toAdd) as $name) {
+            $game->players()->create([
+                'name'     => $name . ' 🤖',
+                'is_alive' => true,
+                'is_bot'   => true,
+            ]);
+            $added++;
+        }
+
+        return redirect()->route('games.lobby', $game)
+            ->with('success', "{$added} bot(s) added to the lobby.");
+    }
+
+    /** Remove all bots from the lobby */
+    public function removeBots(Game $game): RedirectResponse
+    {
+        abort_unless(session("gm_{$game->id}"), 403);
+
+        if ($game->status !== 'waiting') {
+            return back()->with('error', 'You can only remove bots while the game is waiting.');
+        }
+
+        $removed = $game->players()->where('is_bot', true)->count();
+        $game->players()->where('is_bot', true)->delete();
+
+        return redirect()->route('games.lobby', $game)
+            ->with('success', "{$removed} bot(s) removed.");
+    }
+
     // ── Game master controls ──────────────────────────────────────────────────
 
-    public function assignRoles(Request $request, Game $game)
+    public function assignRoles(Request $request, Game $game): RedirectResponse
     {
-        $players = $game->players;
-        $count   = $players->count();
+        $game->load('players');
+        $count = $game->players->count();
 
         if ($count < 4) {
-            return back()->with('error', 'Need at least 4 players to assign roles.');
+            return back()->with('error', 'Need at least 4 players (or bots) to assign roles.');
         }
 
         $werewolfCount = max(1, (int) floor($count / 4));
@@ -124,17 +295,20 @@ class GameController extends Controller
 
         shuffle($roles);
 
-        foreach ($players as $i => $player) {
+        foreach ($game->players as $i => $player) {
             $player->update(['role' => $roles[$i]]);
         }
 
         $game->update(['status' => 'roles_assigned']);
 
+        // Auto-resolve bot night/day actions for roles assigned phase
+        $this->resolveBotActions($game);
+
         return redirect()->route('games.lobby', $game)
-            ->with('success', 'Roles assigned! Everyone can now see their role on their device.');
+            ->with('success', 'Roles assigned! Players can now see their role.');
     }
 
-    public function start(Request $request, Game $game)
+    public function start(Request $request, Game $game): RedirectResponse
     {
         if ($game->status === 'waiting') {
             return back()->with('error', 'Please assign roles first.');
@@ -152,13 +326,89 @@ class GameController extends Controller
             'has_peeked'           => false,
         ]);
 
+        // Immediately resolve all bot night actions
+        $game->load('players');
+        $this->resolveBotNightActions($game);
+
         return redirect()->route('games.play', $game)
             ->with('success', '🌙 Night falls… werewolves, choose your victim.');
     }
 
+    // ── Bot AI logic ──────────────────────────────────────────────────────────
+
+    /**
+     * Bots auto-vote during the night phase.
+     * Werewolf bots pick a random non-wolf alive player.
+     * Doctor bots protect a random alive player.
+     * Seer bots peek at a random alive non-self player.
+     */
+    private function resolveBotNightActions(Game $game): void
+    {
+        $game->load('players');
+        $alive = $game->players->where('is_alive', true);
+
+        foreach ($alive->where('is_bot', true) as $bot) {
+            switch ($bot->role) {
+                case 'Werewolf':
+                    if ($bot->night_vote_target_id) break;
+                    $targets = $alive->whereNotIn('role', ['Werewolf'])->values();
+                    if ($targets->isEmpty()) break;
+                    $target = $targets->random();
+                    $bot->update(['night_vote_target_id' => $target->id]);
+                    break;
+
+                case 'Doctor':
+                    if ($game->doctor_save_id) break;
+                    $target = $alive->random();
+                    $game->update(['doctor_save_id' => $target->id]);
+                    break;
+
+                case 'Seer':
+                    if ($bot->has_peeked) break;
+                    $targets = $alive->where('id', '!=', $bot->id)->values();
+                    if ($targets->isEmpty()) break;
+                    $target = $targets->random();
+                    $game->update(['seer_peek_id' => $target->id]);
+                    $bot->update(['has_peeked' => true]);
+                    break;
+
+                // Villager bots do nothing at night
+            }
+        }
+
+        // Tally wolf votes now that bots have voted
+        $game->load('players');
+        if ($game->pendingWerewolfVotes() === 0) {
+            $game->update(['night_kill_id' => $game->tallyNightVotes()]);
+        }
+    }
+
+    /**
+     * Bots auto-vote during the day phase — random alive non-self target.
+     */
+    private function resolveBotDayActions(Game $game): void
+    {
+        $game->load('players');
+        $alive = $game->players->where('is_alive', true);
+
+        foreach ($alive->where('is_bot', true) as $bot) {
+            if ($bot->day_vote_target_id) continue;
+            $targets = $alive->where('id', '!=', $bot->id)->values();
+            if ($targets->isEmpty()) continue;
+            $target = $targets->random();
+            $bot->update(['day_vote_target_id' => $target->id]);
+        }
+    }
+
+    /** Called after roles assigned to pre-fill bot state if needed */
+    private function resolveBotActions(Game $game): void
+    {
+        // Nothing needed at roles_assigned phase — bots act when game starts
+    }
+
     // ── Role reveal ───────────────────────────────────────────────────────────
 
-    public function myRole(Game $game)
+    public function myRole(Game $game): View|RedirectResponse
     {
         $game->load('players');
         $player = $this->sessionPlayer($game);
@@ -173,7 +423,7 @@ class GameController extends Controller
 
     // ── Live game board ───────────────────────────────────────────────────────
 
-    public function play(Game $game)
+    public function play(Game $game): View
     {
         $game->load('players');
         $myPlayer = $this->sessionPlayer($game);
@@ -182,98 +432,9 @@ class GameController extends Controller
         return view('games.play', compact('game', 'myPlayer', 'isGM'));
     }
 
-    // ── Chat ──────────────────────────────────────────────────────────────────
-
-    /**
-     * GET /games/{game}/chat
-     * Returns JSON messages for the current phase channel.
-     * Night channel is restricted to werewolves only.
-     */
-    public function chatMessages(Request $request, Game $game): JsonResponse
-    {
-        $game->load('players');
-        $player = $this->sessionPlayer($game);
-        $isGM   = session("gm_{$game->id}", false);
-
-        $channel = $game->phase; // 'day' or 'night'
-
-        // Night: only werewolves (and GM as observer) may read
-        if ($channel === 'night' && !$isGM) {
-            if (!$player || $player->role !== 'Werewolf') {
-                return response()->json(['messages' => [], 'locked' => true,
-                    'reason' => 'The village sleeps… 🌙']);
-            }
-        }
-
-        $messages = ChatMessage::where('game_id', $game->id)
-            ->where('channel', $channel)
-            ->where('round', $game->round)
-            ->orderBy('created_at')
-            ->get()
-            ->map(fn($m) => [
-                'id'      => $m->id,
-                'name'    => $m->player_name,
-                'message' => $m->message,
-                'time'    => $m->created_at->format('H:i'),
-            ]);
-
-        return response()->json([
-            'messages' => $messages,
-            'locked'   => false,
-            'channel'  => $channel,
-            'round'    => $game->round,
-        ]);
-    }
-
-    /**
-     * POST /games/{game}/chat
-     * Stores a chat message, enforcing per-channel access rules.
-     */
-    public function sendChat(Request $request, Game $game): JsonResponse
-    {
-        $game->load('players');
-        $player = $this->sessionPlayer($game);
-        $isGM   = session("gm_{$game->id}", false);
-
-        if (!$player && !$isGM) {
-            return response()->json(['error' => 'Not authorised.'], 403);
-        }
-
-        $channel = $game->phase;
-
-        // Night: only alive werewolves may write
-        if ($channel === 'night') {
-            if (!$player || $player->role !== 'Werewolf' || !$player->is_alive) {
-                return response()->json(['error' => 'Only werewolves can chat at night.'], 403);
-            }
-        }
-
-        // Day: dead players cannot chat
-        if ($channel === 'day' && $player && !$player->is_alive) {
-            return response()->json(['error' => 'Eliminated players cannot chat.'], 403);
-        }
-
-        $validated = $request->validate([
-            'message' => ['required', 'string', 'max:300'],
-        ]);
-
-        $authorName = $player ? $player->name : '🎭 GM';
-
-        ChatMessage::create([
-            'game_id'     => $game->id,
-            'player_id'   => $player?->id ?? 0,
-            'player_name' => $authorName,
-            'channel'     => $channel,
-            'round'       => $game->round,
-            'message'     => $validated['message'],
-        ]);
-
-        return response()->json(['ok' => true]);
-    }
-
     // ── Night actions ─────────────────────────────────────────────────────────
 
-    public function nightVote(Request $request, Game $game)
+    public function nightVote(Request $request, Game $game): RedirectResponse
     {
         $request->validate(['target_id' => 'required|integer']);
 
@@ -299,7 +460,7 @@ class GameController extends Controller
             ->with('success', '🐺 Vote cast.');
     }
 
-    public function doctorSave(Request $request, Game $game)
+    public function doctorSave(Request $request, Game $game): RedirectResponse
     {
         $request->validate(['target_id' => 'required|integer']);
 
@@ -319,7 +480,7 @@ class GameController extends Controller
             ->with('success', '💊 Protection granted.');
     }
 
-    public function seerPeek(Request $request, Game $game)
+    public function seerPeek(Request $request, Game $game): RedirectResponse
     {
         $request->validate(['target_id' => 'required|integer']);
 
@@ -347,7 +508,7 @@ class GameController extends Controller
 
     // ── Phase transitions ─────────────────────────────────────────────────────
 
-    public function resolveNight(Request $request, Game $game)
+    public function resolveNight(Request $request, Game $game): RedirectResponse
     {
         abort_unless(session("gm_{$game->id}"), 403);
 
@@ -384,6 +545,9 @@ class GameController extends Controller
             return redirect()->route('games.play', $game)->with('success', $label);
         }
 
+        // Bots vote immediately at day start
+        $this->resolveBotDayActions($game);
+
         $msg = $killed
             ? "☀️ Day breaks… {$killed->name} was killed in the night."
             : "☀️ Day breaks… nobody died! (Doctor saved someone)";
@@ -391,7 +555,7 @@ class GameController extends Controller
         return redirect()->route('games.play', $game)->with('success', $msg);
     }
 
-    public function dayVote(Request $request, Game $game)
+    public function dayVote(Request $request, Game $game): RedirectResponse
     {
         $request->validate(['target_id' => 'required|integer']);
 
@@ -422,13 +586,13 @@ class GameController extends Controller
             ->with('success', "☀️ Voted for {$target->name}. Waiting for others…");
     }
 
-    public function resolveDayManual(Request $request, Game $game)
+    public function resolveDayManual(Request $request, Game $game): RedirectResponse
     {
         abort_unless(session("gm_{$game->id}"), 403);
         return $this->resolveDay($game);
     }
 
-    private function resolveDay(Game $game): \Illuminate\Http\RedirectResponse
+    private function resolveDay(Game $game): RedirectResponse
     {
         $game->load('players');
         $eliminatedId = $game->tallyDayVotes();
@@ -459,6 +623,9 @@ class GameController extends Controller
             return redirect()->route('games.play', $game)->with('success', $label);
         }
 
+        // Bots act immediately at night start
+        $this->resolveBotNightActions($game);
+
         $msg = $eliminated
             ? "🌙 Night falls… {$eliminated->name} was eliminated by the village."
             : "🌙 Night falls… the vote was tied — nobody was eliminated.";
@@ -466,10 +633,12 @@ class GameController extends Controller
         return redirect()->route('games.play', $game)->with('success', $msg);
     }
 
-    // ── Legacy show ───────────────────────────────────────────────────────────
+    // ── Show / legacy ─────────────────────────────────────────────────────────
 
-    public function show(Game $game)
+    public function show(Game $game): View
     {
-        return redirect()->route('games.lobby', $game);
+        $game->load('players');
+        $isGM = session("gm_{$game->id}", false);
+        return view('games.show', compact('game', 'isGM'));
     }
 }

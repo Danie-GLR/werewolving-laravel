@@ -44,6 +44,7 @@ Route::post('/games/{game}/seer-peek',   [GameController::class, 'seerPeek'])->n
 Route::post('/games/{game}/resolve-night', [GameController::class, 'resolveNight'])->name('games.resolve-night');
 Route::post('/games/{game}/day-vote',      [GameController::class, 'dayVote'])->name('games.day-vote');
 Route::post('/games/{game}/resolve-day',   [GameController::class, 'resolveDayManual'])->name('games.resolve-day');
+Route::post('/games/{game}/force-voting', [GameController::class, 'forceVoting'])->name('games.force-voting');
 
 // Show (keep last)
 Route::get('/games/{game}', [GameController::class, 'show'])->name('games.show');

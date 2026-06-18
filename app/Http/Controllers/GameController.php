@@ -13,7 +13,9 @@ use Illuminate\View\View;
 class GameController extends Controller
 {
     // ── Phase duration (seconds) ───────────────────────────────────────────────
-    private const PHASE_DURATION = 90; // seconds per phase
+    private const NIGHT_DURATION      = 60;  // 1 minute for night
+    private const DAY_DISCUSS_DURATION = 120; // 2 minutes for day discussion
+    private const DAY_VOTE_DURATION    = 60;  // 1 minute for voting
 
     // ── Bot names pool ────────────────────────────────────────────────────────
     private const BOT_NAMES = [
@@ -275,6 +277,11 @@ class GameController extends Controller
 
     // ── Game master controls ──────────────────────────────────────────────────
 
+    /**
+     * Assign roles AND immediately start the game in one step.
+     * The GM hits one button — roles are assigned and the game starts.
+     * Players still on the lobby page are auto-redirected by the meta refresh.
+     */
     public function assignRoles(Request $request, Game $game): RedirectResponse
     {
         abort_unless(session("gm_{$game->id}"), 403);
@@ -283,9 +290,10 @@ class GameController extends Controller
         $count = $game->players->count();
 
         if ($count < 4) {
-            return back()->with('error', 'Need at least 4 players (or bots) to assign roles.');
+            return back()->with('error', 'Need at least 4 players (or bots) to start.');
         }
 
+        // ── Assign roles ──────────────────────────────────────────────────────
         $werewolfCount = max(1, (int) floor($count / 4));
         $seerCount     = $count >= 7 ? 1 : 0;
         $doctorCount   = $count >= 9 ? 1 : 0;
@@ -304,31 +312,13 @@ class GameController extends Controller
             $player->update(['role' => $roles[$i]]);
         }
 
-        $game->update(['status' => 'roles_assigned']);
-
-        return redirect()->route('games.lobby', $game)
-            ->with('success', 'Roles assigned! Players can now see their role.');
-    }
-
-    /**
-     * Start the game.
-     * - Host is auto-joined as a player if they have a session player
-     * - Sets phase_ends_at for the first automatic night phase
-     * - Bot night actions fire immediately
-     */
-    public function start(Request $request, Game $game): RedirectResponse
-    {
-        abort_unless(session("gm_{$game->id}"), 403);
-
-        if ($game->status === 'waiting') {
-            return back()->with('error', 'Please assign roles first.');
-        }
-
+        // ── Start immediately ─────────────────────────────────────────────────
         $game->update([
             'status'        => 'in_progress',
             'phase'         => 'night',
+            'day_subphase'  => null,
             'round'         => 1,
-            'phase_ends_at' => now()->addSeconds(self::PHASE_DURATION),
+            'phase_ends_at' => now()->addSeconds(self::NIGHT_DURATION),
         ]);
 
         $game->players()->update([
@@ -341,7 +331,22 @@ class GameController extends Controller
         $this->resolveBotNightActions($game);
 
         return redirect()->route('games.play', $game)
-            ->with('success', '🌙 Night falls… werewolves, choose your victim.');
+            ->with('success', '🌙 Night falls — game started!');
+    }
+
+    /**
+     * Kept for route compatibility — just delegates to assignRoles or
+     * redirects to play if the game is already running.
+     */
+    public function start(Request $request, Game $game): RedirectResponse
+    {
+        abort_unless(session("gm_{$game->id}"), 403);
+
+        if ($game->status === 'in_progress') {
+            return redirect()->route('games.play', $game);
+        }
+
+        return $this->assignRoles($request, $game);
     }
 
     // ── Role reveal ───────────────────────────────────────────────────────────
@@ -395,6 +400,7 @@ class GameController extends Controller
         return response()->json([
             'phase_ends_at' => $game->phase_ends_at?->toIso8601String(),
             'phase'         => $game->phase,
+            'day_subphase'  => $game->day_subphase,
             'round'         => $game->round,
             'status'        => $game->status,
         ]);
@@ -406,7 +412,16 @@ class GameController extends Controller
     {
         if ($game->phase === 'night') {
             $this->performNightResolution($game);
+        } elseif ($game->day_subphase === 'discussion') {
+            // Discussion ended — move to voting
+            $game->update([
+                'day_subphase'  => 'voting',
+                'phase_ends_at' => now()->addSeconds(self::DAY_VOTE_DURATION),
+            ]);
+            // Bots vote immediately when voting opens
+            $this->resolveBotDayActions($game);
         } else {
+            // Voting ended — resolve the day
             $this->performDayResolution($game);
         }
     }
@@ -518,10 +533,10 @@ class GameController extends Controller
         // Determine channel
         if ($game->phase === 'night' && $player->role === 'Werewolf') {
             $channel = 'night';
-        } elseif ($game->phase === 'day') {
+        } elseif ($game->phase === 'day' && $game->day_subphase === 'discussion') {
             $channel = 'day';
         } else {
-            return back()->with('error', 'Chat is not available for your role right now.');
+            return back()->with('error', 'Chat is only open during the discussion phase.');
         }
 
         ChatMessage::create([
@@ -578,6 +593,20 @@ class GameController extends Controller
         return redirect()->route('games.play', $game);
     }
 
+    /** GM can force-skip discussion and jump straight to voting */
+    public function forceVoting(Request $request, Game $game): RedirectResponse
+    {
+        abort_unless(session("gm_{$game->id}"), 403);
+        if ($game->phase === 'day' && $game->day_subphase === 'discussion') {
+            $game->update([
+                'day_subphase'  => 'voting',
+                'phase_ends_at' => now()->addSeconds(self::DAY_VOTE_DURATION),
+            ]);
+            $this->resolveBotDayActions($game->fresh()->load('players') ? $game->fresh() : $game);
+        }
+        return redirect()->route('games.play', $game);
+    }
+
     private function performNightResolution(Game $game): void
     {
         $game->load('players');
@@ -599,10 +628,11 @@ class GameController extends Controller
 
         $game->update([
             'phase'          => 'day',
+            'day_subphase'   => 'discussion',
             'night_kill_id'  => null,
             'doctor_save_id' => null,
             'seer_peek_id'   => null,
-            'phase_ends_at'  => now()->addSeconds(self::PHASE_DURATION),
+            'phase_ends_at'  => now()->addSeconds(self::DAY_DISCUSS_DURATION),
         ]);
 
         $game->load('players');
@@ -638,7 +668,7 @@ class GameController extends Controller
 
         abort_unless($voter && $voter->is_alive, 403);
 
-        if ($game->phase !== 'day' || $game->status !== 'in_progress') {
+        if ($game->phase !== 'day' || $game->day_subphase !== 'voting' || $game->status !== 'in_progress') {
             return back()->with('error', 'Voting is not open right now.');
         }
 
@@ -688,8 +718,9 @@ class GameController extends Controller
 
         $game->update([
             'phase'         => 'night',
+            'day_subphase'  => null,
             'round'         => $game->round + 1,
-            'phase_ends_at' => now()->addSeconds(self::PHASE_DURATION),
+            'phase_ends_at' => now()->addSeconds(self::NIGHT_DURATION),
         ]);
 
         $game->load('players');

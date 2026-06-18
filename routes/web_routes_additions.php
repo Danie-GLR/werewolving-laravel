@@ -45,3 +45,6 @@ Route::post('/games/{game}/resolve-day',  [GameController::class, 'resolveDayMan
 
 Route::post('/games/{game}/heartbeat',    [GameController::class, 'heartbeat'])->name('games.heartbeat');
 Route::post('/games/{game}/chat',         [GameController::class, 'sendChat'])->name('games.chat');
+
+// Skip discussion, jump straight to voting (GM only)
+Route::post('/games/{game}/force-voting', [GameController::class, 'forceVoting'])->name('games.force-voting');

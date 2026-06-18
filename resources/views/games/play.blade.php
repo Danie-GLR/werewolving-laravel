@@ -385,6 +385,9 @@
 
     // Disconnected threshold: 20 seconds without a heartbeat
     $disconnectThreshold = now()->subSeconds(20);
+
+    // Day sub-phase
+    $daySubphase = $game->day_subphase; // 'discussion' | 'voting' | null
 @endphp
 
 {{-- Apply day/night body class immediately so there's no flash --}}
@@ -401,7 +404,15 @@
     </div>
 @else
     <div class="phase-header {{ $phase === 'night' ? 'phase-night' : 'phase-day' }}">
-        <div class="phase-label">{{ $phase === 'night' ? '🌙 Night' : '☀️ Day' }} — Round {{ $game->round }}</div>
+        @if($phase === 'night')
+            <div class="phase-label">🌙 Night — Round {{ $game->round }}</div>
+        @elseif($daySubphase === 'discussion')
+            <div class="phase-label">☀️ Day — Round {{ $game->round }}</div>
+            <div class="phase-sub" style="font-size:1rem; font-weight:900; color:#d97706; margin-top:.3rem;">💬 Discussion Phase</div>
+        @else
+            <div class="phase-label">☀️ Day — Round {{ $game->round }}</div>
+            <div class="phase-sub" style="font-size:1rem; font-weight:900; color:#ef4444; margin-top:.3rem;">🗳️ Voting Phase</div>
+        @endif
         <div class="phase-sub">{{ $game->name }}</div>
         @if($game->phase_ends_at && $status === 'in_progress')
             <div class="phase-timer" id="phase-timer">--:--<span class="timer-label">time remaining</span></div>
@@ -431,13 +442,19 @@
                 @if($game->doctor_save_id) · 💊 Doctor saved @endif
                 @if($game->seer_peek_id)   · 🔮 Seer peeked @endif
             </span>
+        @elseif($daySubphase === 'discussion')
+            <form method="POST" action="{{ route('games.force-voting', $game) }}">
+                @csrf
+                <button type="submit" class="btn-yellow">🗳️ Skip to Voting</button>
+            </form>
+            <span class="tally-note">💬 Discussion phase — chat is open</span>
         @else
             @php $pendingD = $game->pendingDayVotes(); @endphp
             <form method="POST" action="{{ route('games.resolve-day', $game) }}">
                 @csrf
                 <button type="submit" class="btn-yellow">🌙 Force Night</button>
             </form>
-            <span class="tally-note">☀️ {{ $alive->count() - $pendingD }}/{{ $alive->count() }} voted</span>
+            <span class="tally-note">🗳️ {{ $alive->count() - $pendingD }}/{{ $alive->count() }} voted</span>
         @endif
     </div>
 @endif
@@ -540,9 +557,16 @@
     @endif
 
 {{-- Day actions --}}
-@elseif($myPlayer && $myPlayer->is_alive && $status === 'in_progress' && $phase === 'day')
+@elseif($myPlayer && $myPlayer->is_alive && $status === 'in_progress' && $phase === 'day' && $daySubphase === 'discussion')
+    <div class="action-section" style="text-align:center; padding:1.5rem;">
+        <div style="font-size:2rem; margin-bottom:.5rem;">💬</div>
+        <p style="font-weight:800; font-size:1rem; margin-bottom:.3rem;">Discussion Phase</p>
+        <p style="color:var(--muted); font-size:.85rem; font-weight:600;">Talk it out in the chat below. Voting opens when the timer ends.</p>
+    </div>
+
+@elseif($myPlayer && $myPlayer->is_alive && $status === 'in_progress' && $phase === 'day' && $daySubphase === 'voting')
     <div class="action-section">
-        <h2>☀️ Vote to eliminate a suspect</h2>
+        <h2>🗳️ Vote to eliminate a suspect</h2>
         @if($myPlayer->day_vote_target_id)
             @php $dv = $game->players->firstWhere('id', $myPlayer->day_vote_target_id); @endphp
             <p style="color:var(--green); font-weight:700;">✅ You voted for <strong>{{ $dv?->name }}</strong>. Waiting for others…</p>
@@ -632,15 +656,27 @@
 @if($status === 'in_progress' || $status === 'finished')
 @php
     // Determine chat channel label for this viewer
-    $canChat = $myPlayer && $myPlayer->is_alive && $status === 'in_progress';
+    $canChat = false;
     $chatLabel = '💬 Day Chat';
-    if ($myPlayer && $myPlayer->role === 'Werewolf' && $phase === 'night') {
-        $chatLabel = '🐺 Wolf Pack (night only)';
-    } elseif ($myPlayer && $myPlayer->role === 'Seer') {
-        $chatLabel = '💬 Day Chat · 🔮 Seer Visions';
-    } elseif ($phase === 'night' && $myPlayer && $myPlayer->role !== 'Werewolf') {
-        $chatLabel = '💬 Chat (day only)';
-        $canChat = false; // villagers/doctor/seer can't chat at night
+
+    if ($myPlayer && $myPlayer->is_alive && $status === 'in_progress') {
+        if ($phase === 'night' && $myPlayer->role === 'Werewolf') {
+            $canChat   = true;
+            $chatLabel = '🐺 Wolf Pack (night only)';
+        } elseif ($phase === 'day' && $daySubphase === 'discussion') {
+            $canChat   = true;
+            $chatLabel = $myPlayer->role === 'Seer'
+                ? '💬 Discussion · 🔮 Seer Visions'
+                : '💬 Discussion';
+        } elseif ($phase === 'day' && $daySubphase === 'voting') {
+            $canChat   = false;
+            $chatLabel = $myPlayer->role === 'Seer'
+                ? '💬 Chat (voting in progress) · 🔮 Seer Visions'
+                : '💬 Chat (voting in progress)';
+        } elseif ($phase === 'night' && $myPlayer->role !== 'Werewolf') {
+            $canChat   = false;
+            $chatLabel = '💬 Chat (day only)';
+        }
     }
 @endphp
 <div class="chat-panel">
@@ -688,8 +724,10 @@
         <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">Spectating — chat is read-only.</div>
     @elseif(!$myPlayer->is_alive)
         <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">You've been eliminated — chat is read-only.</div>
+    @elseif($phase === 'day' && $daySubphase === 'voting')
+        <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">🗳️ Voting is open — chat is locked.</div>
     @else
-        <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">Chat opens during the day phase.</div>
+        <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">Chat opens during the day discussion phase.</div>
     @endif
 </div>
 @endif

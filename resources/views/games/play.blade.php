@@ -358,6 +358,54 @@
         font-size: .72rem;
         margin-top: 1rem;
     }
+
+    /* ── Two-column layout: chat left, game right ── */
+    .game-layout {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 1.2rem;
+        align-items: start;
+    }
+
+    .game-left { position: sticky; top: 70px; }
+
+    .game-left .chat-panel { margin-top: 0; }
+    .game-left .chat-messages { height: 380px; }
+
+    .history-log {
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        margin-bottom: .75rem;
+        overflow: hidden;
+    }
+
+    .history-log-header {
+        padding: .6rem 1rem;
+        font-size: .72rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        color: var(--muted);
+        border-bottom: 1px solid var(--border);
+    }
+
+    .history-log-body {
+        max-height: 130px;
+        overflow-y: auto;
+        padding: .5rem .8rem;
+        font-size: .78rem;
+        line-height: 1.6;
+        color: var(--muted);
+    }
+
+    .history-log-body strong { color: var(--pink); }
+
+    @media (max-width: 680px) {
+        .game-layout { grid-template-columns: 1fr; }
+        .game-left { position: static; order: 2; }
+        .game-right { order: 1; }
+    }
 </style>
 
 @php
@@ -375,6 +423,10 @@
 @if(session('peek_result'))
     <div class="alert-peek">{{ session('peek_result') }}</div>
 @endif
+
+{{-- ── TWO-COLUMN LAYOUT ── --}}
+<div class="game-layout">
+<div class="game-right">
 
 @php
     $alive   = $game->players->where('is_alive', true);
@@ -428,32 +480,20 @@
     <div class="stat"><div class="value" style="color:var(--muted);">{{ $game->players->where('is_alive',false)->count() }}</div><div class="label">Dead</div></div>
 </div>
 
-{{-- GM controls --}}
+{{-- GM info bar (read-only — phase changes are timer-driven only) --}}
 @if($isGM && $status === 'in_progress')
     <div class="gm-bar">
         @if($phase === 'night')
             @php $pendingW = $game->pendingWerewolfVotes(); @endphp
-            <form method="POST" action="{{ route('games.resolve-night', $game) }}">
-                @csrf
-                <button type="submit" class="btn-yellow">☀️ Force Day</button>
-            </form>
             <span class="tally-note">
                 🐺 {{ $wolves - $pendingW }}/{{ $wolves }} wolves voted
                 @if($game->doctor_save_id) · 💊 Doctor saved @endif
                 @if($game->seer_peek_id)   · 🔮 Seer peeked @endif
             </span>
         @elseif($daySubphase === 'discussion')
-            <form method="POST" action="{{ route('games.force-voting', $game) }}">
-                @csrf
-                <button type="submit" class="btn-yellow">🗳️ Skip to Voting</button>
-            </form>
             <span class="tally-note">💬 Discussion phase — chat is open</span>
         @else
             @php $pendingD = $game->pendingDayVotes(); @endphp
-            <form method="POST" action="{{ route('games.resolve-day', $game) }}">
-                @csrf
-                <button type="submit" class="btn-yellow">🌙 Force Night</button>
-            </form>
             <span class="tally-note">🗳️ {{ $alive->count() - $pendingD }}/{{ $alive->count() }} voted</span>
         @endif
     </div>
@@ -652,6 +692,24 @@
     @endforeach
 </div>
 
+</div>{{-- /game-right --}}
+
+<div class="game-left">
+    {{-- System/history messages (night results, day results) --}}
+    <div class="history-log">
+        <div class="history-log-header">📜 Village history</div>
+        <div class="history-log-body">
+            @forelse($chatMessages->where('player_name','📢 Game') as $hm)
+                @php
+                    $htxt = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', e($hm->message));
+                @endphp
+                <div>{!! $htxt !!}</div>
+            @empty
+                <div style="opacity:.6;">No events yet.</div>
+            @endforelse
+        </div>
+    </div>
+
 {{-- Chat panel --}}
 @if($status === 'in_progress' || $status === 'finished')
 @php
@@ -682,11 +740,10 @@
 <div class="chat-panel">
     <div class="chat-header">{{ $chatLabel }}</div>
     <div class="chat-messages" id="chat-scroll">
-        @forelse($chatMessages as $cm)
+        @forelse($chatMessages->where('player_name','!=','📢 Game') as $cm)
             @php
                 $isSeerMsg  = $cm->channel === 'seer';
                 $isWolfMsg  = $cm->channel === 'night';
-                $isSystem   = $cm->player_name === '📢 Game';
 
                 // Parse seer messages: format is "text|icon:Role"
                 $msgText = $cm->message;
@@ -698,10 +755,8 @@
                 // Convert **bold** markdown to <strong>
                 $msgText = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', e($msgText));
             @endphp
-            <div class="chat-msg {{ $isSeerMsg ? 'seer-msg' : ($isWolfMsg ? 'wolf' : ($isSystem ? 'system' : '')) }}">
-                @if(!$isSystem)
-                    <span class="sender">{{ $cm->player_name }}:</span>
-                @endif
+            <div class="chat-msg {{ $isSeerMsg ? 'seer-msg' : ($isWolfMsg ? 'wolf' : '') }}">
+                <span class="sender">{{ $cm->player_name }}:</span>
                 {!! $msgText !!}
                 @if($msgIcon)
                     <img src="{{ roleImg($msgIcon) }}" alt="{{ $msgIcon }}" class="role-icon">
@@ -717,8 +772,8 @@
     @if($canChat)
         <form method="POST" action="{{ route('games.chat', $game) }}" class="chat-input-row" id="chat-form">
             @csrf
-            <input type="text" name="message" placeholder="Say something…" maxlength="300" autocomplete="off" id="chat-input">
-            <button type="submit" class="chat-send-btn">Send</button>
+            <input type="text" name="message" placeholder="Press enter to send" maxlength="300" autocomplete="off" id="chat-input">
+            <button type="submit" class="chat-send-btn">➤</button>
         </form>
     @elseif(!$myPlayer)
         <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">Spectating — chat is read-only.</div>
@@ -731,6 +786,9 @@
     @endif
 </div>
 @endif
+
+</div>{{-- /game-left --}}
+</div>{{-- /game-layout --}}
 
 @if($status === 'in_progress')
     <meta http-equiv="refresh" content="6">

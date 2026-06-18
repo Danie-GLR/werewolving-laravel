@@ -585,28 +585,7 @@ class GameController extends Controller
 
     // ── Phase transitions ─────────────────────────────────────────────────────
 
-    public function resolveNight(Request $request, Game $game): RedirectResponse
-    {
-        abort_unless(session("gm_{$game->id}"), 403);
-        $game->load('players');
-        $this->performNightResolution($game);
-        return redirect()->route('games.play', $game);
-    }
-
     /** GM can force-skip discussion and jump straight to voting */
-    public function forceVoting(Request $request, Game $game): RedirectResponse
-    {
-        abort_unless(session("gm_{$game->id}"), 403);
-        if ($game->phase === 'day' && $game->day_subphase === 'discussion') {
-            $game->update([
-                'day_subphase'  => 'voting',
-                'phase_ends_at' => now()->addSeconds(self::DAY_VOTE_DURATION),
-            ]);
-            $this->resolveBotDayActions($game->fresh()->load('players') ? $game->fresh() : $game);
-        }
-        return redirect()->route('games.play', $game);
-    }
-
     private function performNightResolution(Game $game): void
     {
         $game->load('players');
@@ -680,23 +659,8 @@ class GameController extends Controller
 
         $voter->update(['day_vote_target_id' => $target->id]);
 
-        $game->load('players');
-
-        if ($game->pendingDayVotes() === 0) {
-            $this->performDayResolution($game);
-            return redirect()->route('games.play', $game);
-        }
-
         return redirect()->route('games.play', $game)
             ->with('success', "☀️ Voted for {$target->name}. Waiting for others…");
-    }
-
-    public function resolveDayManual(Request $request, Game $game): RedirectResponse
-    {
-        abort_unless(session("gm_{$game->id}"), 403);
-        $game->load('players');
-        $this->performDayResolution($game);
-        return redirect()->route('games.play', $game);
     }
 
     private function performDayResolution(Game $game): void

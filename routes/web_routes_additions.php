@@ -38,13 +38,8 @@ Route::get('/games/{game}/my-role',       [GameController::class, 'myRole'])->na
 Route::post('/games/{game}/night-vote',   [GameController::class, 'nightVote'])->name('games.night-vote');
 Route::post('/games/{game}/doctor-save',  [GameController::class, 'doctorSave'])->name('games.doctor-save');
 Route::post('/games/{game}/seer-peek',    [GameController::class, 'seerPeek'])->name('games.seer-peek');
-Route::post('/games/{game}/resolve-night',[GameController::class, 'resolveNight'])->name('games.resolve-night');
 
 Route::post('/games/{game}/day-vote',     [GameController::class, 'dayVote'])->name('games.day-vote');
-Route::post('/games/{game}/resolve-day',  [GameController::class, 'resolveDayManual'])->name('games.resolve-day');
 
 Route::post('/games/{game}/heartbeat',    [GameController::class, 'heartbeat'])->name('games.heartbeat');
 Route::post('/games/{game}/chat',         [GameController::class, 'sendChat'])->name('games.chat');
-
-// Skip discussion, jump straight to voting (GM only)
-Route::post('/games/{game}/force-voting', [GameController::class, 'forceVoting'])->name('games.force-voting');

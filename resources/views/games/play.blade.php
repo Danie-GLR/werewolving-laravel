@@ -352,26 +352,6 @@
 
     .chat-send-btn:hover { opacity: .85; }
 
-    .refresh-note {
-        text-align: center;
-        color: rgba(155,135,184,0.35);
-        font-size: .72rem;
-        margin-top: 1rem;
-    }
-
-    /* ── Two-column layout: chat left, game right ── */
-    .game-layout {
-        display: grid;
-        grid-template-columns: 280px 1fr;
-        gap: 1.2rem;
-        align-items: start;
-    }
-
-    .game-left { position: sticky; top: 70px; }
-
-    .game-left .chat-panel { margin-top: 0; }
-    .game-left .chat-messages { height: 380px; }
-
     .history-log {
         background: var(--bg2);
         border: 1px solid var(--border);
@@ -400,12 +380,6 @@
     }
 
     .history-log-body strong { color: var(--pink); }
-
-    @media (max-width: 680px) {
-        .game-layout { grid-template-columns: 1fr; }
-        .game-left { position: static; order: 2; }
-        .game-right { order: 1; }
-    }
 </style>
 
 @php
@@ -423,10 +397,6 @@
 @if(session('peek_result'))
     <div class="alert-peek">{{ session('peek_result') }}</div>
 @endif
-
-{{-- ── TWO-COLUMN LAYOUT ── --}}
-<div class="game-layout">
-<div class="game-right">
 
 @php
     $alive   = $game->players->where('is_alive', true);
@@ -691,11 +661,7 @@
         </div>
     @endforeach
 </div>
-
-</div>{{-- /game-right --}}
-
-<div class="game-left">
-    {{-- System/history messages (night results, day results) --}}
+{{-- History + Chat --}}
     <div class="history-log">
         <div class="history-log-header">📜 Village history</div>
         <div class="history-log-body">
@@ -787,9 +753,6 @@
 </div>
 @endif
 
-</div>{{-- /game-left --}}
-</div>{{-- /game-layout --}}
-
 @if($status === 'in_progress')
     <meta http-equiv="refresh" content="6">
     <p class="refresh-note">Auto-refreshes every 6 s</p>
@@ -825,8 +788,14 @@
     const interval = setInterval(tick, 1000);
 
     // ── Heartbeat ─────────────────────────────────────────────────────────────
-    // Pings the server every 10 s so last_seen_at stays fresh
-    @if($myPlayer)
+    // Pings the server every 10 s — for every viewer, not just seated players —
+    // so the phase timer keeps advancing server-side even if the page's own
+    // countdown never reaches zero (tab backgrounded, clock drift, etc).
+    const currentPhase  = "{{ $phase }}";
+    const currentSub    = {{ $daySubphase ? "'{$daySubphase}'" : 'null' }};
+    const currentRound  = {{ $game->round }};
+    const currentStatus = "{{ $status }}";
+
     setInterval(function () {
         fetch("{{ route('games.heartbeat', $game) }}", {
             method: 'POST',
@@ -834,9 +803,22 @@
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
             },
-        }).catch(() => {}); // silently ignore network errors
+        })
+        .then(res => res.json())
+        .then(data => {
+            // If the server-side phase/subphase/round/status has moved on
+            // since this page was rendered, reload to pick up the new state.
+            if (
+                data.phase !== currentPhase ||
+                data.day_subphase !== currentSub ||
+                data.round !== currentRound ||
+                data.status !== currentStatus
+            ) {
+                window.location.reload();
+            }
+        })
+        .catch(() => {}); // silently ignore network errors
     }, 10000);
-    @endif
 
     // ── Chat scroll to bottom ─────────────────────────────────────────────────
     const chatScroll = document.getElementById('chat-scroll');
@@ -848,6 +830,27 @@
     // Scroll chat to bottom even when game is finished / no timer
     const chatScroll = document.getElementById('chat-scroll');
     if (chatScroll) chatScroll.scrollTop = chatScroll.scrollHeight;
+
+    @if($status === 'in_progress')
+    // Game is in progress but has no phase_ends_at yet (e.g. just started) —
+    // still send heartbeats so it doesn't sit idle.
+    setInterval(function () {
+        fetch("{{ route('games.heartbeat', $game) }}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+            },
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.phase_ends_at || data.status !== "{{ $status }}") {
+                window.location.reload();
+            }
+        })
+        .catch(() => {});
+    }, 10000);
+    @endif
 </script>
 @endif
 

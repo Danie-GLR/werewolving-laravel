@@ -396,6 +396,14 @@ class GameController extends Controller
             $player->update(['last_seen_at' => now()]);
         }
 
+        // Auto-advance if the phase timer has expired — heartbeat fires every
+        // 10s for every connected client, so this guarantees the game keeps
+        // moving even if nobody's browser happens to reload the page.
+        if ($game->status === 'in_progress' && $game->phase_ends_at && now()->gt($game->phase_ends_at)) {
+            $this->autoAdvancePhase($game);
+            $game->refresh();
+        }
+
         // Return minimal state for the JS timer
         return response()->json([
             'phase_ends_at' => $game->phase_ends_at?->toIso8601String(),

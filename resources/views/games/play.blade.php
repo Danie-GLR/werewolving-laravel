@@ -383,14 +383,16 @@
 </style>
 
 @php
-    function roleImg($role) {
-        $map = [
-            'Werewolf' => 'icon_werewolf.png',
-            'Villager' => 'icon_villager.png',
-            'Seer'     => 'icon_seer.png',
-            'Doctor'   => 'icon_doctor.png',
-        ];
-        return asset('images/' . ($map[$role] ?? 'icon_villager.png'));
+    if (!function_exists('roleImg')) {
+        function roleImg($role) {
+            $map = [
+                'Werewolf' => 'icon_werewolf.png',
+                'Villager' => 'icon_villager.png',
+                'Seer'     => 'icon_seer.png',
+                'Doctor'   => 'icon_doctor.png',
+            ];
+            return asset('images/' . ($map[$role] ?? 'icon_villager.png'));
+        }
     }
 @endphp
 
@@ -759,99 +761,72 @@
 @endif
 
 {{-- ── JS: countdown timer + heartbeat ── --}}
-@if($status === 'in_progress' && $game->phase_ends_at)
 <script>
 (function () {
-    // ── Countdown ──────────────────────────────────────────────────────────────
-    const timerEl  = document.getElementById('phase-timer');
-    const endsAt   = new Date("{{ $game->phase_ends_at->toIso8601String() }}");
+    const phaseEndsAt   = @json($game->phase_ends_at?->toIso8601String());
+    const currentPhase  = @json($phase);
+    const currentSub    = @json($daySubphase);
+    const currentRound  = @json($game->round);
+    const currentStatus = @json($status);
 
-    function tick() {
-        const diff = Math.max(0, Math.floor((endsAt - Date.now()) / 1000));
-        const mm   = String(Math.floor(diff / 60)).padStart(2, '0');
-        const ss   = String(diff % 60).padStart(2, '0');
+    // ── Countdown (only if there's an active phase timer) ──────────────────
+    if (phaseEndsAt) {
+        const timerEl = document.getElementById('phase-timer');
+        const endsAt  = new Date(phaseEndsAt);
+        let reloaded  = false;
 
-        if (timerEl) {
-            // Keep the label span, only update the text node before it
-            const label = timerEl.querySelector('.timer-label');
-            timerEl.childNodes[0].textContent = `${mm}:${ss}`;
-            timerEl.classList.toggle('timer-low', diff <= 10);
-        }
+        function tick() {
+            const diff = Math.max(0, Math.floor((endsAt - Date.now()) / 1000));
+            const mm   = String(Math.floor(diff / 60)).padStart(2, '0');
+            const ss   = String(diff % 60).padStart(2, '0');
 
-        if (diff <= 0) {
-            clearInterval(interval);
-            window.location.reload();
-        }
-    }
+            if (timerEl) {
+                timerEl.childNodes[0].textContent = `${mm}:${ss}`;
+                timerEl.classList.toggle('timer-low', diff <= 10);
+            }
 
-    tick();
-    const interval = setInterval(tick, 1000);
-
-    // ── Heartbeat ─────────────────────────────────────────────────────────────
-    // Pings the server every 10 s — for every viewer, not just seated players —
-    // so the phase timer keeps advancing server-side even if the page's own
-    // countdown never reaches zero (tab backgrounded, clock drift, etc).
-    const currentPhase  = "{{ $phase }}";
-    const currentSub    = {{ $daySubphase ? "'{$daySubphase}'" : 'null' }};
-    const currentRound  = {{ $game->round }};
-    const currentStatus = "{{ $status }}";
-
-    setInterval(function () {
-        fetch("{{ route('games.heartbeat', $game) }}", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
-            },
-        })
-        .then(res => res.json())
-        .then(data => {
-            // If the server-side phase/subphase/round/status has moved on
-            // since this page was rendered, reload to pick up the new state.
-            if (
-                data.phase !== currentPhase ||
-                data.day_subphase !== currentSub ||
-                data.round !== currentRound ||
-                data.status !== currentStatus
-            ) {
+            if (diff <= 0 && !reloaded) {
+                reloaded = true;
                 window.location.reload();
             }
-        })
-        .catch(() => {}); // silently ignore network errors
-    }, 10000);
+        }
 
-    // ── Chat scroll to bottom ─────────────────────────────────────────────────
+        tick();
+        setInterval(tick, 1000);
+    }
+
+    // ── Heartbeat ────────────────────────────────────────────────────────────
+    // Pings the server every 10 s — for every viewer, not just seated players —
+    // so the game keeps advancing server-side even if a tab's own countdown
+    // never fires (backgrounded tab, clock drift, etc).
+    if (currentStatus === 'in_progress') {
+        setInterval(function () {
+            fetch("{{ route('games.heartbeat', $game) }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                },
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (
+                    data.phase !== currentPhase ||
+                    data.day_subphase !== currentSub ||
+                    data.round !== currentRound ||
+                    data.status !== currentStatus
+                ) {
+                    window.location.reload();
+                }
+            })
+            .catch(() => {});
+        }, 10000);
+    }
+
+    // ── Chat scroll to bottom ───────────────────────────────────────────────
     const chatScroll = document.getElementById('chat-scroll');
     if (chatScroll) chatScroll.scrollTop = chatScroll.scrollHeight;
 })();
 </script>
-@else
-<script>
-    // Scroll chat to bottom even when game is finished / no timer
-    const chatScroll = document.getElementById('chat-scroll');
-    if (chatScroll) chatScroll.scrollTop = chatScroll.scrollHeight;
-
-    @if($status === 'in_progress')
-    // Game is in progress but has no phase_ends_at yet (e.g. just started) —
-    // still send heartbeats so it doesn't sit idle.
-    setInterval(function () {
-        fetch("{{ route('games.heartbeat', $game) }}", {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
-            },
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.phase_ends_at || data.status !== "{{ $status }}") {
-                window.location.reload();
-            }
-        })
-        .catch(() => {});
-    }, 10000);
-    @endif
-</script>
-@endif
 
 @endsection

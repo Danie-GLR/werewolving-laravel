@@ -8,8 +8,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Game extends Model
 {
     protected $fillable = [
-        'name', 'status', 'phase', 'round',
+        'name', 'status', 'phase', 'round', 'day_subphase',
         'night_kill_id', 'doctor_save_id', 'seer_peek_id',
+        'phase_ends_at', 'discussion_ends_at',
+    ];
+
+    protected $casts = [
+        'phase_ends_at'      => 'datetime',
+        'discussion_ends_at' => 'datetime',
     ];
 
     public function players(): HasMany

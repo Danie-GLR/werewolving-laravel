@@ -361,7 +361,7 @@ class GameController extends Controller
                 ->with('error', 'Your session expired. Please rejoin.');
         }
 
-        return view('games.my_role', compact('game', 'player'));
+        return view('games.role_reveal', compact('game', 'player'));
     }
 
     // ── Live game board ───────────────────────────────────────────────────────

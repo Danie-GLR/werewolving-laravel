@@ -444,32 +444,7 @@
     </div>
 @endif
 
-{{-- Stats --}}
-<div class="stats">
-    <div class="stat"><div class="value" style="color:var(--green);">{{ $alive->count() }}</div><div class="label">Alive</div></div>
-    <div class="stat"><div class="value" style="color:var(--red);">{{ $wolves }}</div><div class="label">Wolves</div></div>
-    <div class="stat"><div class="value" style="color:var(--green);">{{ $village }}</div><div class="label">Village</div></div>
-    <div class="stat"><div class="value" style="color:var(--muted);">{{ $game->players->where('is_alive',false)->count() }}</div><div class="label">Dead</div></div>
-</div>
-
-{{-- Role card — shown only to the actual player; GM/spectators see nothing here --}}
-@if($myPlayer)
-    <div class="role-card role-{{ $myPlayer->role ?? 'Villager' }}">
-        <img src="{{ roleImg($myPlayer->role) }}" alt="{{ $myPlayer->role }}" class="role-card-img">
-        <div class="role-title">
-            {{ $myPlayer->name }} — <strong>{{ $myPlayer->role }}</strong>
-            @if(!$myPlayer->is_alive)<span style="color:var(--red);"> (Eliminated)</span>@endif
-        </div>
-        <div class="role-desc">
-            @switch($myPlayer->role)
-                @case('Werewolf') Wake each night to eliminate a villager. Win when wolves ≥ village. @break
-                @case('Villager') Vote out the wolves during the day. Trust no one. @break
-                @case('Seer')     Peek at one player's role each night. Guide the village carefully. @break
-                @case('Doctor')   Protect one player from the wolves each night. @break
-            @endswitch
-        </div>
-    </div>
-@endif
+{{-- Role card removed — player grid below conveys this info --}}
 
 {{-- Night actions --}}
 @if($myPlayer && $myPlayer->is_alive && $status === 'in_progress' && $phase === 'night')
@@ -730,10 +705,9 @@
 </div>
 @endif
 
-@if($status === 'in_progress')
-    <meta http-equiv="refresh" content="6">
-    <p class="refresh-note">Auto-refreshes every 6 s</p>
-@endif
+{{-- Page no longer hard-refreshes on a fixed timer. The heartbeat below
+     polls quietly every 10s and only reloads when the phase/round/status
+     actually changes server-side, so nothing visibly flickers in between. --}}
 
 {{-- ── JS: countdown timer + heartbeat ── --}}
 <script>
@@ -762,7 +736,9 @@
 
             if (diff <= 0 && !reloaded) {
                 reloaded = true;
-                window.location.reload();
+                document.body.style.transition = 'opacity .25s ease';
+                document.body.style.opacity = '0';
+                setTimeout(() => window.location.reload(), 200);
             }
         }
 
@@ -771,9 +747,10 @@
     }
 
     // ── Heartbeat ────────────────────────────────────────────────────────────
-    // Pings the server every 10 s — for every viewer, not just seated players —
+    // Pings the server every 8 s — for every viewer, not just seated players —
     // so the game keeps advancing server-side even if a tab's own countdown
-    // never fires (backgrounded tab, clock drift, etc).
+    // never fires (backgrounded tab, clock drift, etc). Reload only happens
+    // when something has actually changed, so this stays invisible otherwise.
     if (currentStatus === 'in_progress') {
         setInterval(function () {
             fetch("{{ route('games.heartbeat', $game) }}", {
@@ -791,11 +768,13 @@
                     data.round !== currentRound ||
                     data.status !== currentStatus
                 ) {
-                    window.location.reload();
+                    document.body.style.transition = 'opacity .25s ease';
+                    document.body.style.opacity = '0';
+                    setTimeout(() => window.location.reload(), 200);
                 }
             })
             .catch(() => {});
-        }, 10000);
+        }, 8000);
     }
 
     // ── Chat scroll to bottom ───────────────────────────────────────────────

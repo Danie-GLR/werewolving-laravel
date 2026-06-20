@@ -103,6 +103,9 @@
                 @endphp
                 <span class="badge {{ $badgeClass }}">{{ $game->status_label }}</span>
                 <div class="game-row-meta">{{ $game->created_at->diffForHumans() }}</div>
+                @if($game->status === 'waiting')
+                    <a href="{{ route('games.lobby', $game) }}" class="btn" style="padding:.35rem .9rem; font-size:.8rem;">Join →</a>
+                @endif
                 <a href="{{ route('games.show', $game) }}" class="btn-outline" style="padding:.35rem .9rem; font-size:.8rem;">View →</a>
             </div>
         @endforeach

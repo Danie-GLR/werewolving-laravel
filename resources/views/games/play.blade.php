@@ -645,7 +645,7 @@
                 // Convert **bold** markdown to <strong>
                 $msgText = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', e($msgText));
             @endphp
-            <div class="chat-msg {{ $isSystem ? 'system-announce' : ($isSeerMsg ? 'seer-msg' : ($isWolfMsg ? 'wolf' : '')) }}">
+            <div class="chat-msg {{ $isSystem ? 'system-announce' : ($isSeerMsg ? 'seer-msg' : ($isWolfMsg ? 'wolf' : '')) }}" data-id="{{ $cm->id }}">
                 @if($isSystem)
                     {!! $msgText !!}
                 @else
@@ -751,9 +751,117 @@
         }, 8000);
     }
 
-    // ── Chat scroll to bottom ───────────────────────────────────────────────
+    // ── Chat: send + poll via AJAX, no page reload ──────────────────────────
     const chatScroll = document.getElementById('chat-scroll');
-    if (chatScroll) chatScroll.scrollTop = chatScroll.scrollHeight;
+    const chatForm    = document.getElementById('chat-form');
+    const chatInput   = document.getElementById('chat-input');
+    const chatFetchUrl = @json(route('games.chat.fetch', $game));
+    const chatSendUrl  = @json(route('games.chat', $game));
+    const csrfToken    = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+    function isNearBottom() {
+        if (!chatScroll) return true;
+        return chatScroll.scrollHeight - chatScroll.scrollTop - chatScroll.clientHeight < 80;
+    }
+
+    function scrollToBottom() {
+        if (chatScroll) chatScroll.scrollTop = chatScroll.scrollHeight;
+    }
+
+    function escHtml(str) {
+        return String(str)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function boldify(str) {
+        return escHtml(str).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    }
+
+    function renderMessage(m) {
+        const div = document.createElement('div');
+        const isWolf = m.channel === 'night';
+        const isSeer = m.channel === 'seer';
+        div.className = 'chat-msg ' + (m.isSystem ? 'system-announce' : (isSeer ? 'seer-msg' : (isWolf ? 'wolf' : '')));
+        div.dataset.id = m.id;
+
+        if (m.isSystem) {
+            div.innerHTML = boldify(m.message);
+        } else {
+            let body = `<span class="sender">${escHtml(m.name)}:</span> ${boldify(m.message)}`;
+            if (isWolf) body += `<span style="font-size:.7rem;opacity:.5;margin-left:.3rem;">(wolf chat)</span>`;
+            div.innerHTML = body;
+        }
+        return div;
+    }
+
+    function appendNewMessages(messages) {
+        if (!chatScroll) return;
+        const existingIds = new Set(
+            Array.from(chatScroll.querySelectorAll('[data-id]')).map(el => el.dataset.id)
+        );
+        const placeholder = chatScroll.querySelector('.chat-msg.system:not([data-id])');
+        const wasNearBottom = isNearBottom();
+        let appended = false;
+
+        messages.forEach(m => {
+            if (existingIds.has(String(m.id))) return;
+            if (placeholder) placeholder.remove();
+            chatScroll.appendChild(renderMessage(m));
+            appended = true;
+        });
+
+        if (appended && wasNearBottom) scrollToBottom();
+    }
+
+    // Initial scroll to bottom on page load
+    scrollToBottom();
+
+    // Poll for new messages every 4s — quiet, no reload, appends only what's new
+    if (chatScroll) {
+        setInterval(function () {
+            fetch(chatFetchUrl, { headers: { 'Accept': 'application/json' } })
+                .then(res => res.json())
+                .then(data => appendNewMessages(data.messages || []))
+                .catch(() => {});
+        }, 4000);
+    }
+
+    // Send a message via AJAX — stays on the page, no scroll jump
+    if (chatForm && chatInput) {
+        chatForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            const text = chatInput.value.trim();
+            if (!text) return;
+
+            chatInput.disabled = true;
+
+            fetch(chatSendUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                },
+                body: JSON.stringify({ message: text }),
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.ok) {
+                    chatInput.value = '';
+                    // Immediately pull fresh messages so the sender sees their own message
+                    fetch(chatFetchUrl, { headers: { 'Accept': 'application/json' } })
+                        .then(res => res.json())
+                        .then(d => appendNewMessages(d.messages || []));
+                }
+            })
+            .catch(() => {})
+            .finally(() => {
+                chatInput.disabled = false;
+                chatInput.focus();
+            });
+        });
+    }
 })();
 </script>
 

@@ -13,18 +13,15 @@ use Illuminate\View\View;
 class GameController extends Controller
 {
     // ── Phase duration (seconds) ───────────────────────────────────────────────
-    private const NIGHT_DURATION      = 30;  // 1 minute for night
-    private const DAY_DISCUSS_DURATION = 120; // 2 minutes for day discussion
-    private const DAY_VOTE_DURATION    = 30;  // 1 minute for voting
+    private const NIGHT_DURATION      = 30;  // 0.5 minute for night
+    private const DAY_DISCUSS_DURATION = 60; // 1 minute for day discussion
+    private const DAY_VOTE_DURATION    = 30;  // 0.5 minute for voting
 
     // ── Bot names pool ────────────────────────────────────────────────────────
     private const BOT_NAMES = [
         'Shadow', 'Raven', 'Hunter', 'Blaze', 'Frost',
         'Viper', 'Ghost', 'Storm', 'Ember', 'Claw',
-        'L', 'Light Yagami', 'Sable', 'Flint', 'Hex',
-        'Billy Butcher', 'Michael', 'Isagi', 'Denji', 'Foxtrot',
-        'Druski', 'Drake', 'Fiona', 'Scott Cawthon', 'Deji',
-        'Null', 'Linda', 'IM SPONGEBOB', 'Horse',
+        'Dusk', 'Thorn', 'Sable', 'Flint', 'Hex',
     ];
 
     // ── Session helpers ───────────────────────────────────────────────────────
@@ -528,12 +525,15 @@ class GameController extends Controller
 
     // ── Chat ──────────────────────────────────────────────────────────────────
 
-    public function sendChat(Request $request, Game $game): RedirectResponse
+    public function sendChat(Request $request, Game $game): RedirectResponse|JsonResponse
     {
         $game->load('players');
         $player = $this->sessionPlayer($game);
 
         if (!$player || !$player->is_alive || $game->status !== 'in_progress') {
+            if ($request->expectsJson()) {
+                return response()->json(['error' => 'You cannot chat right now.'], 422);
+            }
             return back()->with('error', 'You cannot chat right now.');
         }
 
@@ -547,10 +547,13 @@ class GameController extends Controller
         } elseif ($game->phase === 'day' && in_array($game->day_subphase, ['discussion', 'voting'])) {
             $channel = 'day';
         } else {
+            if ($request->expectsJson()) {
+                return response()->json(['error' => 'Chat is closed right now.'], 422);
+            }
             return back()->with('error', 'Chat is closed right now.');
         }
 
-        ChatMessage::create([
+        $msg = ChatMessage::create([
             'game_id'     => $game->id,
             'player_id'   => $player->id,
             'player_name' => $player->name,
@@ -559,7 +562,33 @@ class GameController extends Controller
             'message'     => trim($data['message']),
         ]);
 
+        if ($request->expectsJson()) {
+            return response()->json(['ok' => true, 'id' => $msg->id]);
+        }
+
         return redirect()->route('games.play', $game);
+    }
+
+    /**
+     * Lightweight polling endpoint — returns chat messages visible to the
+     * current viewer as JSON, without re-rendering the whole page.
+     */
+    public function fetchChat(Game $game): JsonResponse
+    {
+        $game->load('players');
+        $myPlayer = $this->sessionPlayer($game);
+        $messages = $this->getChatMessages($game, $myPlayer);
+
+        return response()->json([
+            'messages' => $messages->map(fn ($m) => [
+                'id'        => $m->id,
+                'name'      => $m->player_name,
+                'message'   => $m->message,
+                'channel'   => $m->channel,
+                'isMine'    => $myPlayer && $m->player_id === $myPlayer->id,
+                'isSystem'  => $m->player_name === '📢 Game',
+            ])->values(),
+        ]);
     }
 
     /**

@@ -13,15 +13,18 @@ use Illuminate\View\View;
 class GameController extends Controller
 {
     // ── Phase duration (seconds) ───────────────────────────────────────────────
-    private const NIGHT_DURATION      = 60;  // 1 minute for night
+    private const NIGHT_DURATION      = 30;  // 1 minute for night
     private const DAY_DISCUSS_DURATION = 120; // 2 minutes for day discussion
-    private const DAY_VOTE_DURATION    = 60;  // 1 minute for voting
+    private const DAY_VOTE_DURATION    = 30;  // 1 minute for voting
 
     // ── Bot names pool ────────────────────────────────────────────────────────
     private const BOT_NAMES = [
         'Shadow', 'Raven', 'Hunter', 'Blaze', 'Frost',
         'Viper', 'Ghost', 'Storm', 'Ember', 'Claw',
-        'Dusk', 'Thorn', 'Sable', 'Flint', 'Hex',
+        'L', 'Light Yagami', 'Sable', 'Flint', 'Hex',
+        'Billy Butcher', 'Michael', 'Isagi', 'Denji', 'Foxtrot',
+        'Druski', 'Drake', 'Fiona', 'Scott Cawthon', 'Deji',
+        'Null', 'Linda', 'IM SPONGEBOB', 'Horse',
     ];
 
     // ── Session helpers ───────────────────────────────────────────────────────
@@ -361,7 +364,7 @@ class GameController extends Controller
                 ->with('error', 'Your session expired. Please rejoin.');
         }
 
-        return view('games.role_reveal', compact('game', 'player'));
+        return view('games.my_role', compact('game', 'player'));
     }
 
     // ── Live game board ───────────────────────────────────────────────────────
@@ -541,10 +544,10 @@ class GameController extends Controller
         // Determine channel
         if ($game->phase === 'night' && $player->role === 'Werewolf') {
             $channel = 'night';
-        } elseif ($game->phase === 'day' && $game->day_subphase === 'discussion') {
+        } elseif ($game->phase === 'day' && in_array($game->day_subphase, ['discussion', 'voting'])) {
             $channel = 'day';
         } else {
-            return back()->with('error', 'Chat is only open during the discussion phase.');
+            return back()->with('error', 'Chat is closed right now.');
         }
 
         ChatMessage::create([

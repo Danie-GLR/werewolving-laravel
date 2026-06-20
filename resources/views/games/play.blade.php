@@ -352,34 +352,20 @@
 
     .chat-send-btn:hover { opacity: .85; }
 
-    .history-log {
-        background: var(--bg2);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        margin-bottom: .75rem;
-        overflow: hidden;
-    }
-
-    .history-log-header {
-        padding: .6rem 1rem;
-        font-size: .72rem;
-        font-weight: 900;
-        text-transform: uppercase;
-        letter-spacing: .08em;
-        color: var(--muted);
-        border-bottom: 1px solid var(--border);
-    }
-
-    .history-log-body {
-        max-height: 130px;
-        overflow-y: auto;
-        padding: .5rem .8rem;
+    .chat-msg.system-announce {
+        text-align: center;
         font-size: .78rem;
-        line-height: 1.6;
-        color: var(--muted);
+        font-weight: 700;
+        color: var(--yellow);
+        background: rgba(255,209,102,0.08);
+        border: 1px solid rgba(255,209,102,0.2);
+        border-radius: var(--radius-sm);
+        padding: .4rem .7rem;
+        margin: .25rem 0;
+        align-self: center;
     }
 
-    .history-log-body strong { color: var(--pink); }
+    .chat-msg.system-announce strong { color: var(--pink); }
 </style>
 
 @php
@@ -613,22 +599,7 @@
         </div>
     @endforeach
 </div>
-{{-- History + Chat --}}
-    <div class="history-log">
-        <div class="history-log-header">📜 Village history</div>
-        <div class="history-log-body">
-            @forelse($chatMessages->where('player_name','📢 Game') as $hm)
-                @php
-                    $htxt = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', e($hm->message));
-                @endphp
-                <div>{!! $htxt !!}</div>
-            @empty
-                <div style="opacity:.6;">No events yet.</div>
-            @endforelse
-        </div>
-    </div>
-
-{{-- Chat panel --}}
+{{-- Chat (includes village history / system announcements inline) --}}
 @if($status === 'in_progress' || $status === 'finished')
 @php
     // Determine chat channel label for this viewer
@@ -645,10 +616,10 @@
                 ? '💬 Discussion · 🔮 Seer Visions'
                 : '💬 Discussion';
         } elseif ($phase === 'day' && $daySubphase === 'voting') {
-            $canChat   = false;
+            $canChat   = true;
             $chatLabel = $myPlayer->role === 'Seer'
-                ? '💬 Chat (voting in progress) · 🔮 Seer Visions'
-                : '💬 Chat (voting in progress)';
+                ? '💬 Chat · 🗳️ Voting open · 🔮 Seer Visions'
+                : '💬 Chat · 🗳️ Voting open';
         } elseif ($phase === 'night' && $myPlayer->role !== 'Werewolf') {
             $canChat   = false;
             $chatLabel = '💬 Chat (day only)';
@@ -658,8 +629,9 @@
 <div class="chat-panel">
     <div class="chat-header">{{ $chatLabel }}</div>
     <div class="chat-messages" id="chat-scroll">
-        @forelse($chatMessages->where('player_name','!=','📢 Game') as $cm)
+        @forelse($chatMessages as $cm)
             @php
+                $isSystem   = $cm->player_name === '📢 Game';
                 $isSeerMsg  = $cm->channel === 'seer';
                 $isWolfMsg  = $cm->channel === 'night';
 
@@ -673,14 +645,18 @@
                 // Convert **bold** markdown to <strong>
                 $msgText = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', e($msgText));
             @endphp
-            <div class="chat-msg {{ $isSeerMsg ? 'seer-msg' : ($isWolfMsg ? 'wolf' : '') }}">
-                <span class="sender">{{ $cm->player_name }}:</span>
-                {!! $msgText !!}
-                @if($msgIcon)
-                    <img src="{{ roleImg($msgIcon) }}" alt="{{ $msgIcon }}" class="role-icon">
-                @endif
-                @if($isWolfMsg)
-                    <span style="font-size:.7rem; opacity:.5; margin-left:.3rem;">(wolf chat)</span>
+            <div class="chat-msg {{ $isSystem ? 'system-announce' : ($isSeerMsg ? 'seer-msg' : ($isWolfMsg ? 'wolf' : '')) }}">
+                @if($isSystem)
+                    {!! $msgText !!}
+                @else
+                    <span class="sender">{{ $cm->player_name }}:</span>
+                    {!! $msgText !!}
+                    @if($msgIcon)
+                        <img src="{{ roleImg($msgIcon) }}" alt="{{ $msgIcon }}" class="role-icon">
+                    @endif
+                    @if($isWolfMsg)
+                        <span style="font-size:.7rem; opacity:.5; margin-left:.3rem;">(wolf chat)</span>
+                    @endif
                 @endif
             </div>
         @empty
@@ -697,10 +673,8 @@
         <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">Spectating — chat is read-only.</div>
     @elseif(!$myPlayer->is_alive)
         <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">You've been eliminated — chat is read-only.</div>
-    @elseif($phase === 'day' && $daySubphase === 'voting')
-        <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">🗳️ Voting is open — chat is locked.</div>
     @else
-        <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">Chat opens during the day discussion phase.</div>
+        <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">Chat opens during the day.</div>
     @endif
 </div>
 @endif

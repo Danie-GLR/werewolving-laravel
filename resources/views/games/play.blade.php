@@ -452,25 +452,6 @@
     <div class="stat"><div class="value" style="color:var(--muted);">{{ $game->players->where('is_alive',false)->count() }}</div><div class="label">Dead</div></div>
 </div>
 
-{{-- GM info bar (read-only — phase changes are timer-driven only) --}}
-@if($isGM && $status === 'in_progress')
-    <div class="gm-bar">
-        @if($phase === 'night')
-            @php $pendingW = $game->pendingWerewolfVotes(); @endphp
-            <span class="tally-note">
-                🐺 {{ $wolves - $pendingW }}/{{ $wolves }} wolves voted
-                @if($game->doctor_save_id) · 💊 Doctor saved @endif
-                @if($game->seer_peek_id)   · 🔮 Seer peeked @endif
-            </span>
-        @elseif($daySubphase === 'discussion')
-            <span class="tally-note">💬 Discussion phase — chat is open</span>
-        @else
-            @php $pendingD = $game->pendingDayVotes(); @endphp
-            <span class="tally-note">🗳️ {{ $alive->count() - $pendingD }}/{{ $alive->count() }} voted</span>
-        @endif
-    </div>
-@endif
-
 {{-- Role card — shown only to the actual player; GM/spectators see nothing here --}}
 @if($myPlayer)
     <div class="role-card role-{{ $myPlayer->role ?? 'Villager' }}">
@@ -561,13 +542,6 @@
         </div>
     @endif
 
-    @if($myPlayer->role === 'Villager')
-        <div class="action-section" style="text-align:center; padding:2rem;">
-            <div style="font-size:2.5rem; margin-bottom:.5rem;">😴</div>
-            <p style="color:var(--muted); font-weight:600;">It's night. Sleep tight.<br>Actions happen in the morning.</p>
-        </div>
-    @endif
-
 {{-- Day actions --}}
 @elseif($myPlayer && $myPlayer->is_alive && $status === 'in_progress' && $phase === 'day' && $daySubphase === 'discussion')
     <div class="action-section" style="text-align:center; padding:1.5rem;">
@@ -608,11 +582,12 @@
 {{--
     Role visibility rules:
     - Finished game: show everyone's real role icon + chip
+    - Eliminated players: always reveal their real role (death reveal)
     - Your own card: show your real role icon
     - Werewolf viewing another wolf: show wolf icon
     - Seer viewing a peeked player (this round): show their real icon (visual hint)
-    - Everyone else: show 👤 / 💀 — NO role information
-    - GM and spectators: same as "everyone else" — they cannot see roles
+    - Everyone else (alive, unrevealed): show 👤 — NO role information
+    - GM and spectators: same as "everyone else" for alive players — they cannot see roles early
 --}}
 <div class="section-title">Players</div>
 <div class="player-grid">
@@ -627,7 +602,7 @@
                 && $game->seer_peek_id == $p->id
                 && $p->is_alive;
 
-            $showRealIcon = $status === 'finished' || $isMe || $isFellow || $seerPeeked;
+            $showRealIcon = $status === 'finished' || $isMe || $isFellow || $seerPeeked || !$p->is_alive;
 
             // Disconnected: no heartbeat in last 20 seconds (bots are always "online")
             $isAway = !$p->is_bot
@@ -648,7 +623,7 @@
                     <span class="you-dot" title="you"></span>
                 @endif
             </div>
-            @if($status === 'finished')
+            @if($status === 'finished' || !$p->is_alive)
                 <span class="role-chip role-{{ $p->role }}">{{ $p->role }}</span>
             @elseif($seerPeeked)
                 {{-- Seer only: show the role chip for the peeked player --}}

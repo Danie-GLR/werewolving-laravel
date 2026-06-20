@@ -48,6 +48,7 @@ Route::post('/games/{game}/heartbeat', [GameController::class, 'heartbeat'])->na
 
 // Chat
 Route::post('/games/{game}/chat', [GameController::class, 'sendChat'])->name('games.chat');
+Route::get('/games/{game}/chat/fetch', [GameController::class, 'fetchChat'])->name('games.chat.fetch');
 
 // Show (keep last)
 Route::get('/games/{game}', [GameController::class, 'show'])->name('games.show');

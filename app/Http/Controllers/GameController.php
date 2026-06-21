@@ -13,9 +13,9 @@ use Illuminate\View\View;
 class GameController extends Controller
 {
     // ── Phase duration (seconds) ───────────────────────────────────────────────
-    private const NIGHT_DURATION      = 30;  // 0.5 minute for night
-    private const DAY_DISCUSS_DURATION = 60; // 1 minute for day discussion
-    private const DAY_VOTE_DURATION    = 30;  // 0.5 minute for voting
+    private const NIGHT_DURATION      = 60;  // 1 minute for night
+    private const DAY_DISCUSS_DURATION = 120; // 2 minutes for day discussion
+    private const DAY_VOTE_DURATION    = 60;  // 1 minute for voting
 
     // ── Bot names pool ────────────────────────────────────────────────────────
     private const BOT_NAMES = [
@@ -309,7 +309,12 @@ class GameController extends Controller
         shuffle($roles);
 
         foreach ($game->players as $i => $player) {
-            $player->update(['role' => $roles[$i]]);
+            $player->update([
+                'role' => $roles[$i],
+                // Keep existing numbers stable on re-assign; only number
+                // players who don't already have one.
+                'seat_number' => $player->seat_number ?? ($i + 1),
+            ]);
         }
 
         // ── Start immediately ─────────────────────────────────────────────────
@@ -382,7 +387,50 @@ class GameController extends Controller
         // Load chat messages visible to this viewer
         $chatMessages = $this->getChatMessages($game, $myPlayer);
 
-        return view('games.play', compact('game', 'myPlayer', 'isGM', 'chatMessages'));
+        // Vote breakdowns — day votes shown to everyone, night votes only
+        // ever rendered to werewolves (the blade gates this, not this query)
+        $dayVotes   = $game->dayVoteBreakdown();
+        $nightVotes = $game->nightVoteBreakdown();
+
+        return view('games.play', compact('game', 'myPlayer', 'isGM', 'chatMessages', 'dayVotes', 'nightVotes'));
+    }
+
+    /**
+     * Lightweight polling endpoint — returns current day-vote (and, for
+     * werewolves, night-vote) breakdowns as JSON so the UI can update vote
+     * tallies live without a full page reload.
+     */
+    public function fetchVotes(Game $game): JsonResponse
+    {
+        $game->load('players');
+        $myPlayer = $this->sessionPlayer($game);
+
+        $names = $game->players->pluck('name', 'id');
+        $numbers = $game->players->pluck('seat_number', 'id');
+
+        $dayVotes = collect($game->dayVoteBreakdown())->map(fn ($targetId, $voterId) => [
+            'voterId'     => (int) $voterId,
+            'voterName'   => $names->get($voterId),
+            'voterNumber' => $numbers->get($voterId),
+            'targetId'    => $targetId,
+            'targetName'  => $names->get($targetId),
+        ])->values();
+
+        $payload = ['dayVotes' => $dayVotes];
+
+        // Night votes only ever included in the payload for werewolves —
+        // never leak wolf voting to anyone else, even via this endpoint.
+        if ($myPlayer && $myPlayer->role === 'Werewolf' && $myPlayer->is_alive) {
+            $payload['nightVotes'] = collect($game->nightVoteBreakdown())->map(fn ($targetId, $voterId) => [
+                'voterId'     => (int) $voterId,
+                'voterName'   => $names->get($voterId),
+                'voterNumber' => $numbers->get($voterId),
+                'targetId'    => $targetId,
+                'targetName'  => $names->get($targetId),
+            ])->values();
+        }
+
+        return response()->json($payload);
     }
 
     // ── Heartbeat (called by JS every 10 seconds) ─────────────────────────────
@@ -530,7 +578,7 @@ class GameController extends Controller
         $game->load('players');
         $player = $this->sessionPlayer($game);
 
-        if (!$player || !$player->is_alive || $game->status !== 'in_progress') {
+        if (!$player || $game->status !== 'in_progress') {
             if ($request->expectsJson()) {
                 return response()->json(['error' => 'You cannot chat right now.'], 422);
             }
@@ -542,7 +590,10 @@ class GameController extends Controller
         ]);
 
         // Determine channel
-        if ($game->phase === 'night' && $player->role === 'Werewolf') {
+        if (!$player->is_alive) {
+            // Eliminated players can always talk to each other, any phase.
+            $channel = 'dead';
+        } elseif ($game->phase === 'night' && $player->role === 'Werewolf') {
             $channel = 'night';
         } elseif ($game->phase === 'day' && in_array($game->day_subphase, ['discussion', 'voting'])) {
             $channel = 'day';
@@ -579,14 +630,18 @@ class GameController extends Controller
         $myPlayer = $this->sessionPlayer($game);
         $messages = $this->getChatMessages($game, $myPlayer);
 
+        // Map player_id => seat_number once, instead of querying per message
+        $seatNumbers = $game->players->pluck('seat_number', 'id');
+
         return response()->json([
             'messages' => $messages->map(fn ($m) => [
-                'id'        => $m->id,
-                'name'      => $m->player_name,
-                'message'   => $m->message,
-                'channel'   => $m->channel,
-                'isMine'    => $myPlayer && $m->player_id === $myPlayer->id,
-                'isSystem'  => $m->player_name === '📢 Game',
+                'id'       => $m->id,
+                'name'     => $m->player_name,
+                'number'   => $seatNumbers->get($m->player_id),
+                'message'  => $m->message,
+                'channel'  => $m->channel,
+                'isMine'   => $myPlayer && $m->player_id === $myPlayer->id,
+                'isSystem' => $m->player_name === '📢 Game',
             ])->values(),
         ]);
     }
@@ -596,6 +651,7 @@ class GameController extends Controller
      * - day messages: everyone
      * - night messages: only werewolves
      * - seer messages: only the seer (their own peek results)
+     * - dead messages: only eliminated players (talking among themselves)
      */
     private function getChatMessages(Game $game, ?Player $myPlayer): \Illuminate\Support\Collection
     {
@@ -615,6 +671,10 @@ class GameController extends Controller
 
         if ($myPlayer->role === 'Seer') {
             $channels[] = 'seer';
+        }
+
+        if (!$myPlayer->is_alive) {
+            $channels[] = 'dead';
         }
 
         return ChatMessage::where('game_id', $game->id)

@@ -10,11 +10,12 @@ class Game extends Model
     protected $fillable = [
         'name', 'status', 'phase', 'round', 'day_subphase',
         'night_kill_id', 'doctor_save_id', 'seer_peek_id',
-        'phase_ends_at',
+        'phase_ends_at', 'discussion_ends_at',
     ];
 
     protected $casts = [
-        'phase_ends_at' => 'datetime',
+        'phase_ends_at'      => 'datetime',
+        'discussion_ends_at' => 'datetime',
     ];
 
     public function players(): HasMany
@@ -108,6 +109,30 @@ class Game extends Model
         return $this->alivePlayers()
             ->whereNull('day_vote_target_id')
             ->count();
+    }
+
+    /**
+     * Day vote breakdown: voter_id => target_id, for all alive players who
+     * have voted so far. Used to show "who's voting who" publicly.
+     */
+    public function dayVoteBreakdown(): array
+    {
+        return $this->alivePlayers()
+            ->whereNotNull('day_vote_target_id')
+            ->pluck('day_vote_target_id', 'id')
+            ->toArray();
+    }
+
+    /**
+     * Werewolf night vote breakdown: voter_id => target_id. Only ever shown
+     * to fellow werewolves (the night chat / role action panel).
+     */
+    public function nightVoteBreakdown(): array
+    {
+        return $this->aliveWerewolves()
+            ->whereNotNull('night_vote_target_id')
+            ->pluck('night_vote_target_id', 'id')
+            ->toArray();
     }
 
     /**

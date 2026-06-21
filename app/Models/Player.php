@@ -11,6 +11,7 @@ class Player extends Model
     protected $fillable = [
         'game_id', 'name', 'role', 'is_alive', 'is_bot', 'last_seen_at',
         'token', 'night_vote_target_id', 'day_vote_target_id', 'has_peeked',
+        'seat_number',
     ];
 
     protected $casts = [
@@ -36,17 +37,11 @@ class Player extends Model
         };
     }
 
-    /**
-     * Generate and save a unique secret token for this player.
-     */
     public function generateToken(): void
     {
         $this->update(['token' => Str::random(32)]);
     }
 
-    /**
-     * URL the player uses to see their secret role.
-     */
     public function roleRevealUrl(): string
     {
         return route('games.my-role', ['game' => $this->game_id, 'token' => $this->token]);

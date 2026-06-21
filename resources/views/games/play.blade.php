@@ -148,6 +148,9 @@
     }
 
     .action-section h2 { margin-top: 0; font-size: 1.05rem; font-weight: 900; margin-bottom: 1rem; }
+    .vote-row { font-size: .85rem; color: var(--text); padding: .3rem 0; border-bottom: 1px solid var(--border); }
+    .vote-row:last-child { border-bottom: none; }
+    .vote-row strong { color: var(--pink); }
 
     .vote-grid { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
 
@@ -191,6 +194,7 @@
     .player-card .av { font-size: 1.6rem; margin-bottom: .35rem; }
     .player-card .av img { width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4)); }
     .player-card .pn { font-size: .8rem; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .seat-num { color: var(--pink); font-weight: 900; margin-right: .2rem; }
 
     /* disconnected badge */
     .away-badge {
@@ -304,6 +308,15 @@
     }
 
     .chat-msg.system   { color: var(--muted); font-style: italic; }
+    .chat-msg.dead-msg { color: #b8a8d8; opacity: .85; }
+    .chat-msg.dead-msg .sender { color: #8b6fc9; }
+    .mention-me {
+        background: rgba(255,61,127,0.25);
+        color: var(--pink);
+        font-weight: 900;
+        padding: 0 .2rem;
+        border-radius: 4px;
+    }
     .chat-msg.wolf     { color: #fca5a5; }
     .chat-msg.seer-msg { color: #e9d5ff; }
 
@@ -516,7 +529,7 @@
         <h2>🗳️ Vote to eliminate a suspect</h2>
         @if($myPlayer->day_vote_target_id)
             @php $dv = $game->players->firstWhere('id', $myPlayer->day_vote_target_id); @endphp
-            <p style="color:var(--green); font-weight:700;">✅ You voted for <strong>{{ $dv?->name }}</strong>. Waiting for others…</p>
+            <p style="color:var(--green); font-weight:700;">✅ You voted for <strong>{{ $dv?->seat_number ? '#'.$dv->seat_number.' ' : '' }}{{ $dv?->name }}</strong>. Waiting for others…</p>
         @else
             <p style="color:var(--muted); font-size:.85rem; font-weight:600;">Who do you think is a werewolf?</p>
             <div class="vote-grid">
@@ -524,7 +537,7 @@
                     <form method="POST" action="{{ route('games.day-vote', $game) }}">
                         @csrf
                         <input type="hidden" name="target_id" value="{{ $t->id }}">
-                        <button type="submit" class="vote-btn">{{ $t->name }}</button>
+                        <button type="submit" class="vote-btn">{{ $t->seat_number ? '#'.$t->seat_number.' ' : '' }}{{ $t->name }}</button>
                     </form>
                 @endforeach
             </div>
@@ -536,6 +549,40 @@
         <div style="font-size:2.5rem; margin-bottom:.5rem;">☠️</div>
         <p style="color:var(--red); font-weight:800;">You've been eliminated.</p>
         <p style="color:var(--muted); font-size:.85rem; font-weight:600; margin-top:.3rem;">Spectate the rest of the game.</p>
+    </div>
+@endif
+
+{{-- Public day vote tally — visible to everyone once voting has started --}}
+@if($status === 'in_progress' && $phase === 'day' && $daySubphase === 'voting')
+    <div class="action-section" id="vote-tally-box">
+        <h2 style="margin-bottom:.6rem;">📊 Who's voting who</h2>
+        <div id="vote-tally-list">
+            @forelse($dayVotes as $v)
+                <div class="vote-row" data-voter="{{ $v['voterId'] }}">
+                    <strong>{{ $v['voterNumber'] ? '#'.$v['voterNumber'].' ' : '' }}{{ $v['voterName'] }}</strong>
+                    → {{ $v['targetName'] }}
+                </div>
+            @empty
+                <p style="color:var(--muted); font-size:.85rem;" id="vote-tally-empty">No votes cast yet.</p>
+            @endforelse
+        </div>
+    </div>
+@endif
+
+{{-- Wolf-only night vote tally --}}
+@if($status === 'in_progress' && $phase === 'night' && $myPlayer && $myPlayer->role === 'Werewolf' && $myPlayer->is_alive)
+    <div class="action-section" id="night-vote-tally-box">
+        <h2 style="margin-bottom:.6rem;">🐺 Pack votes</h2>
+        <div id="night-vote-tally-list">
+            @forelse($nightVotes as $v)
+                <div class="vote-row" data-voter="{{ $v['voterId'] }}">
+                    <strong>{{ $v['voterNumber'] ? '#'.$v['voterNumber'].' ' : '' }}{{ $v['voterName'] }}</strong>
+                    → {{ $v['targetName'] }}
+                </div>
+            @empty
+                <p style="color:var(--muted); font-size:.85rem;" id="night-vote-tally-empty">No votes cast yet.</p>
+            @endforelse
+        </div>
     </div>
 @endif
 
@@ -579,6 +626,7 @@
                 @endif
             </div>
             <div class="pn">
+                @if($p->seat_number)<span class="seat-num">#{{ $p->seat_number }}</span>@endif
                 {{ $p->name }}
                 @if($isMe)
                     <span class="you-dot" title="you"></span>
@@ -606,8 +654,11 @@
     $canChat = false;
     $chatLabel = '💬 Day Chat';
 
-    if ($myPlayer && $myPlayer->is_alive && $status === 'in_progress') {
-        if ($phase === 'night' && $myPlayer->role === 'Werewolf') {
+    if ($myPlayer && $status === 'in_progress') {
+        if (!$myPlayer->is_alive) {
+            $canChat   = true;
+            $chatLabel = '👻 Dead Chat — only eliminated players see this';
+        } elseif ($phase === 'night' && $myPlayer->role === 'Werewolf') {
             $canChat   = true;
             $chatLabel = '🐺 Wolf Pack (night only)';
         } elseif ($phase === 'day' && $daySubphase === 'discussion') {
@@ -634,6 +685,8 @@
                 $isSystem   = $cm->player_name === '📢 Game';
                 $isSeerMsg  = $cm->channel === 'seer';
                 $isWolfMsg  = $cm->channel === 'night';
+                $isDeadMsg  = $cm->channel === 'dead';
+                $senderSeat = $game->players->firstWhere('id', $cm->player_id)?->seat_number;
 
                 // Parse seer messages: format is "text|icon:Role"
                 $msgText = $cm->message;
@@ -644,18 +697,29 @@
                 }
                 // Convert **bold** markdown to <strong>
                 $msgText = preg_replace('/\*\*(.+?)\*\*/', '<strong>$1</strong>', e($msgText));
+                // Highlight @mentions of my own seat number, e.g. "#3"
+                if ($myPlayer && $myPlayer->seat_number) {
+                    $msgText = preg_replace(
+                        '/#' . preg_quote($myPlayer->seat_number, '/') . '\b/',
+                        '<span class="mention-me">#' . $myPlayer->seat_number . '</span>',
+                        $msgText
+                    );
+                }
             @endphp
-            <div class="chat-msg {{ $isSystem ? 'system-announce' : ($isSeerMsg ? 'seer-msg' : ($isWolfMsg ? 'wolf' : '')) }}" data-id="{{ $cm->id }}">
+            <div class="chat-msg {{ $isSystem ? 'system-announce' : ($isDeadMsg ? 'dead-msg' : ($isSeerMsg ? 'seer-msg' : ($isWolfMsg ? 'wolf' : ''))) }}" data-id="{{ $cm->id }}" data-channel="{{ $cm->channel }}">
                 @if($isSystem)
                     {!! $msgText !!}
                 @else
-                    <span class="sender">{{ $cm->player_name }}:</span>
+                    <span class="sender">{{ $senderSeat ? '#'.$senderSeat.' ' : '' }}{{ $cm->player_name }}:</span>
                     {!! $msgText !!}
                     @if($msgIcon)
                         <img src="{{ roleImg($msgIcon) }}" alt="{{ $msgIcon }}" class="role-icon">
                     @endif
                     @if($isWolfMsg)
                         <span style="font-size:.7rem; opacity:.5; margin-left:.3rem;">(wolf chat)</span>
+                    @endif
+                    @if($isDeadMsg)
+                        <span style="font-size:.7rem; opacity:.5; margin-left:.3rem;">(dead chat)</span>
                     @endif
                 @endif
             </div>
@@ -671,8 +735,6 @@
         </form>
     @elseif(!$myPlayer)
         <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">Spectating — chat is read-only.</div>
-    @elseif(!$myPlayer->is_alive)
-        <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">You've been eliminated — chat is read-only.</div>
     @else
         <div style="padding:.6rem 1rem; font-size:.8rem; color:var(--muted); font-weight:600;">Chat opens during the day.</div>
     @endif
@@ -774,22 +836,33 @@
             .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    const myNumber = @json($myPlayer?->seat_number);
+
     function boldify(str) {
-        return escHtml(str).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        let html = escHtml(str).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        if (myNumber) {
+            const re = new RegExp('#' + myNumber + '\\b', 'g');
+            html = html.replace(re, '<span class="mention-me">#' + myNumber + '</span>');
+        }
+        return html;
     }
 
     function renderMessage(m) {
         const div = document.createElement('div');
         const isWolf = m.channel === 'night';
         const isSeer = m.channel === 'seer';
-        div.className = 'chat-msg ' + (m.isSystem ? 'system-announce' : (isSeer ? 'seer-msg' : (isWolf ? 'wolf' : '')));
+        const isDead = m.channel === 'dead';
+        div.className = 'chat-msg ' + (m.isSystem ? 'system-announce' : (isDead ? 'dead-msg' : (isSeer ? 'seer-msg' : (isWolf ? 'wolf' : ''))));
         div.dataset.id = m.id;
+        div.dataset.channel = m.channel;
 
         if (m.isSystem) {
             div.innerHTML = boldify(m.message);
         } else {
-            let body = `<span class="sender">${escHtml(m.name)}:</span> ${boldify(m.message)}`;
+            const numPrefix = m.number ? `#${m.number} ` : '';
+            let body = `<span class="sender">${escHtml(numPrefix)}${escHtml(m.name)}:</span> ${boldify(m.message)}`;
             if (isWolf) body += `<span style="font-size:.7rem;opacity:.5;margin-left:.3rem;">(wolf chat)</span>`;
+            if (isDead) body += `<span style="font-size:.7rem;opacity:.5;margin-left:.3rem;">(dead chat)</span>`;
             div.innerHTML = body;
         }
         return div;
@@ -861,6 +934,36 @@
                 chatInput.focus();
             });
         });
+    }
+    // ── Live vote tally polling — updates "who's voting who" without reload ──
+    const voteTallyList      = document.getElementById('vote-tally-list');
+    const nightVoteTallyList = document.getElementById('night-vote-tally-list');
+
+    function renderVoteRows(votes) {
+        if (!votes.length) {
+            return '<p style="color:var(--muted); font-size:.85rem;">No votes cast yet.</p>';
+        }
+        return votes.map(v => {
+            const num = v.voterNumber ? `#${v.voterNumber} ` : '';
+            return `<div class="vote-row"><strong>${escHtml(num)}${escHtml(v.voterName || '')}</strong> → ${escHtml(v.targetName || '')}</div>`;
+        }).join('');
+    }
+
+    if (voteTallyList || nightVoteTallyList) {
+        const votesFetchUrl = @json(route('games.votes.fetch', $game));
+        setInterval(function () {
+            fetch(votesFetchUrl, { headers: { 'Accept': 'application/json' } })
+                .then(res => res.json())
+                .then(data => {
+                    if (voteTallyList && data.dayVotes) {
+                        voteTallyList.innerHTML = renderVoteRows(data.dayVotes);
+                    }
+                    if (nightVoteTallyList && data.nightVotes) {
+                        nightVoteTallyList.innerHTML = renderVoteRows(data.nightVotes);
+                    }
+                })
+                .catch(() => {});
+        }, 4000);
     }
 })();
 </script>

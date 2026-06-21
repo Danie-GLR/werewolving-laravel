@@ -73,24 +73,26 @@
     </div>
 
     <div class="flex">
-        <a href="{{ route('games.edit', $game) }}" class="btn-edit">✏️ Edit</a>
+        @if($isGM)
+            <a href="{{ route('games.edit', $game) }}" class="btn-edit">✏️ Edit</a>
 
-        @if($game->status === 'waiting')
-            <form method="POST" action="{{ route('games.assign-roles', $game) }}">
-                @csrf
-                <button type="submit" class="btn">🎲 Assign Roles</button>
-            </form>
-        @endif
+            @if($game->status === 'waiting')
+                <form method="POST" action="{{ route('games.assign-roles', $game) }}">
+                    @csrf
+                    <button type="submit" class="btn">🎲 Assign Roles</button>
+                </form>
+            @endif
 
-        @if($game->status === 'roles_assigned')
-            <form method="POST" action="{{ route('games.assign-roles', $game) }}">
-                @csrf
-                <button type="submit" class="btn-outline">🔄 Re-assign</button>
-            </form>
-            <form method="POST" action="{{ route('games.start', $game) }}">
-                @csrf
-                <button type="submit" class="btn-green">▶ Start Game</button>
-            </form>
+            @if($game->status === 'roles_assigned')
+                <form method="POST" action="{{ route('games.assign-roles', $game) }}">
+                    @csrf
+                    <button type="submit" class="btn-outline">🔄 Re-assign</button>
+                </form>
+                <form method="POST" action="{{ route('games.start', $game) }}">
+                    @csrf
+                    <button type="submit" class="btn-green">▶ Start Game</button>
+                </form>
+            @endif
         @endif
 
         @if(in_array($game->status, ['in_progress', 'finished']))
@@ -111,14 +113,16 @@
         <div class="label">Total Players</div>
     </div>
     @if($game->status !== 'waiting')
-        <div class="stat">
-            <div class="value" style="color:#fca5a5;">{{ $wolves }}</div>
-            <div class="label">Werewolves</div>
-        </div>
-        <div class="stat">
-            <div class="value" style="color:#86efac;">{{ $game->players->whereNotIn('role',['Werewolf'])->count() }}</div>
-            <div class="label">Village</div>
-        </div>
+        @if($isGM)
+            <div class="stat">
+                <div class="value" style="color:#fca5a5;">{{ $wolves }}</div>
+                <div class="label">Werewolves</div>
+            </div>
+            <div class="stat">
+                <div class="value" style="color:#86efac;">{{ $game->players->whereNotIn('role',['Werewolf'])->count() }}</div>
+                <div class="label">Village</div>
+            </div>
+        @endif
         <div class="stat">
             <div class="value" style="color:var(--yellow);">{{ $alive->count() }}</div>
             <div class="label">Alive</div>
@@ -135,12 +139,15 @@
 
 <div class="player-grid">
     @foreach($game->players as $player)
+        @php
+            $revealRole = $isGM || $game->status === 'finished' || !$player->is_alive;
+        @endphp
         <div class="player-card {{ !$player->is_alive ? 'dead' : '' }}">
-            <div class="avatar">{{ $game->status !== 'waiting' ? $player->role_icon : '❓' }}</div>
+            <div class="avatar">{{ ($game->status !== 'waiting' && $revealRole) ? $player->role_icon : '👤' }}</div>
             <div class="player-name">{{ $player->name }}</div>
-            @if($game->status !== 'waiting' && $player->role)
+            @if($game->status !== 'waiting' && $player->role && $revealRole)
                 <span class="role-chip role-{{ $player->role }}">{{ $player->role }}</span>
-            @else
+            @elseif($game->status === 'waiting')
                 <span class="role-chip role-unknown">No role</span>
             @endif
             @if(!$player->is_alive)
@@ -150,8 +157,8 @@
     @endforeach
 </div>
 
-{{-- Secret links --}}
-@if($game->status !== 'waiting')
+{{-- Secret links — GM only, these are private reveal URLs --}}
+@if($game->status !== 'waiting' && $isGM)
     <div class="card mt-3">
         <h2 style="margin-top:0; margin-bottom:.5rem; font-size:1.1rem; font-weight:900;">🔗 Secret Role Links</h2>
         <p style="color:var(--muted); font-size:.85rem; margin-bottom:1rem; font-weight:600;">

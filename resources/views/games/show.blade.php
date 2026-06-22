@@ -147,43 +147,44 @@
     @endforeach
 </div>
 
-{{-- Secret links — GM only, these are private reveal URLs --}}
-@if($game->status !== 'waiting' && $isGM)
-    <div class="card mt-3">
-        <h2 style="margin-top:0; margin-bottom:.5rem; font-size:1.1rem; font-weight:900;">🔗 Secret Role Links</h2>
-        <p style="color:var(--muted); font-size:.85rem; margin-bottom:1rem; font-weight:600;">
-            Share each player's link privately — they'll see only their own role.
+{{-- Lobby QR code — GM only, lets visitors scan to join --}}
+@if($isGM)
+    <div class="card mt-3" style="text-align:center;">
+        <h2 style="margin-top:0; margin-bottom:.35rem; font-size:1.1rem; font-weight:900;">📱 Join QR Code</h2>
+        <p style="color:var(--muted); font-size:.85rem; margin-bottom:1.1rem; font-weight:600;">
+            Show this to players — scanning takes them straight to the lobby.
         </p>
-        <table>
-            <thead>
-                <tr><th>Player</th><th>Secret Link</th></tr>
-            </thead>
-            <tbody>
-                @foreach($game->players as $player)
-                    <tr>
-                        <td><strong>{{ $player->name }}</strong></td>
-                        <td>
-                            @if($player->token)
-                                <span style="font-family:monospace; font-size:.76rem; color:var(--muted); word-break:break-all;">
-                                    {{ $player->roleRevealUrl() }}
-                                </span>
-                                <button onclick="copyText(this, '{{ $player->roleRevealUrl() }}')"
-                                        style="background:var(--bg3); border:1px solid var(--border); color:var(--muted);
-                                               padding:.15rem .5rem; border-radius:4px; cursor:pointer; font-size:.7rem;
-                                               margin-left:.4rem; font-family:'Nunito',sans-serif; font-weight:700;">
-                                    Copy
-                                </button>
-                            @else
-                                <span style="color:var(--muted);">—</span>
-                            @endif
-                        </td>
-                    </tr>
-                @endforeach
-            </tbody>
-        </table>
+
+        @php $lobbyUrl = route('games.lobby', $game); @endphp
+
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=12&data={{ urlencode($lobbyUrl) }}"
+             alt="QR code for lobby"
+             width="220" height="220"
+             style="border-radius:12px; background:#fff; padding:6px; display:inline-block;">
+
+        <div style="margin-top:.9rem;">
+            <span style="font-family:monospace; font-size:.76rem; color:var(--muted); word-break:break-all; max-width:320px; display:inline-block;">
+                {{ $lobbyUrl }}
+            </span>
+        </div>
+
+        <div style="margin-top:.75rem; display:flex; gap:.5rem; justify-content:center;">
+            <button onclick="copyText(this, '{{ $lobbyUrl }}')"
+                    style="background:var(--bg3); border:1px solid var(--border); color:var(--muted);
+                           padding:.3rem .8rem; border-radius:6px; cursor:pointer; font-size:.8rem;
+                           font-family:'Nunito',sans-serif; font-weight:700;">
+                📋 Copy Link
+            </button>
+            <a href="https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=20&data={{ urlencode($lobbyUrl) }}"
+               download="{{ Str::slug($game->name) }}-join-qr.png"
+               style="background:var(--bg3); border:1px solid var(--border); color:var(--muted);
+                      padding:.3rem .8rem; border-radius:6px; text-decoration:none; font-size:.8rem;
+                      font-family:'Nunito',sans-serif; font-weight:700;">
+                ⬇️ Download QR
+            </a>
+        </div>
     </div>
 @endif
-
 {{-- Role legend --}}
 @if($game->status !== 'waiting')
     <div class="card mt-3">

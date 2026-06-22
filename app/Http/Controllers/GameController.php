@@ -13,15 +13,15 @@ use Illuminate\View\View;
 class GameController extends Controller
 {
     // ── Phase duration (seconds) ───────────────────────────────────────────────
-    private const NIGHT_DURATION      = 60;  // 1 minute for night
-    private const DAY_DISCUSS_DURATION = 120; // 2 minutes for day discussion
-    private const DAY_VOTE_DURATION    = 60;  // 1 minute for voting
+    private const NIGHT_DURATION      = 30;  // 30 seconds for night
+    private const DAY_DISCUSS_DURATION = 60; // 1 minute for day discussion
+    private const DAY_VOTE_DURATION    = 30;  // 30 seconds for voting
 
     // ── Bot names pool ────────────────────────────────────────────────────────
     private const BOT_NAMES = [
-        'Shadow', 'Raven', 'Hunter', 'Blaze', 'Frost',
-        'Viper', 'Ghost', 'Storm', 'Ember', 'Claw',
-        'Dusk', 'Thorn', 'Sable', 'Flint', 'Hex',
+        'Shadow', 'Jason Voorhees', 'William Afton', 'Blaze', 'John Kaisen',
+        'Viper', 'Tze', 'Storm', 'john Zenin', 'Claw',
+        'Dusk', 'Thorn', 'Sable', 'Gojo', 'Geto',
     ];
 
     // ── Session helpers ───────────────────────────────────────────────────────
@@ -387,10 +387,21 @@ class GameController extends Controller
         // Load chat messages visible to this viewer
         $chatMessages = $this->getChatMessages($game, $myPlayer);
 
-        // Vote breakdowns — day votes shown to everyone, night votes only
-        // ever rendered to werewolves (the blade gates this, not this query)
-        $dayVotes   = $game->dayVoteBreakdown();
-        $nightVotes = $game->nightVoteBreakdown();
+        // Build rich vote arrays (same shape as fetchVotes JSON) so the blade
+        // can render voter name/number → target name directly.
+        $names   = $game->players->pluck('name', 'id');
+        $numbers = $game->players->pluck('seat_number', 'id');
+
+        $buildVotes = fn($raw) => collect($raw)->map(fn ($targetId, $voterId) => [
+            'voterId'     => (int) $voterId,
+            'voterName'   => $names->get($voterId),
+            'voterNumber' => $numbers->get($voterId),
+            'targetId'    => $targetId,
+            'targetName'  => $names->get($targetId),
+        ])->values()->all();
+
+        $dayVotes   = $buildVotes($game->dayVoteBreakdown());
+        $nightVotes = $buildVotes($game->nightVoteBreakdown());
 
         return view('games.play', compact('game', 'myPlayer', 'isGM', 'chatMessages', 'dayVotes', 'nightVotes'));
     }

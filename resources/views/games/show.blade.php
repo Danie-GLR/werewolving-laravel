@@ -130,7 +130,7 @@
 <div class="player-grid">
     @foreach($game->players as $player)
         @php
-            $revealRole = $isGM || $game->status === 'finished' || !$player->is_alive;
+            $revealRole = $game->status === 'finished' || !$player->is_alive;
         @endphp
         <div class="player-card {{ !$player->is_alive ? 'dead' : '' }}">
             <div class="avatar">{{ ($game->status !== 'waiting' && $revealRole) ? $player->role_icon : '👤' }}</div>

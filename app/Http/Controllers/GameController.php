@@ -157,6 +157,10 @@ class GameController extends Controller
             return back()->with('error', "The name \"{$name}\" is already taken.");
         }
 
+        if ($game->players()->count() >= 20) {
+            return back()->with('error', 'This game is full (max 20 players).');
+        }
+
         $player = $game->players()->create([
             'name'     => $name,
             'is_alive' => true,
@@ -315,6 +319,11 @@ class GameController extends Controller
                 // players who don't already have one.
                 'seat_number' => $player->seat_number ?? ($i + 1),
             ]);
+            // Generate a unique token so players can access their private role
+            // reveal URL. generateToken() was defined but never called before.
+            if (!$player->token) {
+                $player->generateToken();
+            }
         }
 
         // ── Start immediately ─────────────────────────────────────────────────
@@ -356,10 +365,17 @@ class GameController extends Controller
 
     // ── Role reveal ───────────────────────────────────────────────────────────
 
-    public function myRole(Game $game): View|RedirectResponse
+    public function myRole(Game $game, Request $request): View|RedirectResponse
     {
         $game->load('players');
+
+        // Allow access via session (the player on this device) OR via the
+        // token in the URL (share link generated from the GM show page).
         $player = $this->sessionPlayer($game);
+
+        if (!$player && $request->filled('token')) {
+            $player = $game->players->firstWhere('token', $request->input('token'));
+        }
 
         if (!$player) {
             return redirect()->route('games.lobby', $game)
@@ -727,24 +743,25 @@ class GameController extends Controller
 
         $game->load('players');
 
-        if ($game->checkWinner()) {
-            $game->update(['status' => 'finished', 'phase_ends_at' => null]);
-            return;
-        }
-
-        // Write a day-channel system message announcing the night result
+        // Write a day-channel system message announcing the night result (always,
+        // even on the game-ending round so players see the outcome).
         $msg = $killed
             ? "☀️ Day breaks… **{$killed->name}** was killed in the night."
             : "☀️ Day breaks… nobody died! (Doctor saved someone)";
 
         ChatMessage::create([
             'game_id'     => $game->id,
-            'player_id'   => $game->players->first()->id, // system uses first player slot
+            'player_id'   => null,  // system message — no real player
             'player_name' => '📢 Game',
             'channel'     => 'day',
             'round'       => $game->round,
             'message'     => $msg,
         ]);
+
+        if ($game->checkWinner()) {
+            $game->update(['status' => 'finished', 'phase_ends_at' => null]);
+            return;
+        }
 
         $this->resolveBotDayActions($game);
     }
@@ -791,6 +808,10 @@ class GameController extends Controller
             'has_peeked'           => false,
         ]);
 
+        // Capture the current round number BEFORE incrementing, so the
+        // system message is stamped on the round that was just resolved.
+        $currentRound = $game->round;
+
         $game->update([
             'phase'         => 'night',
             'day_subphase'  => null,
@@ -800,24 +821,25 @@ class GameController extends Controller
 
         $game->load('players');
 
-        if ($game->checkWinner()) {
-            $game->update(['status' => 'finished', 'phase_ends_at' => null]);
-            return;
-        }
-
-        // Write a night-channel system message announcing the day result
+        // Write a day-channel system message announcing the day result (always,
+        // even on the game-ending round so players see who was eliminated).
         $msg = $eliminated
             ? "🌙 Night falls… **{$eliminated->name}** was eliminated by the village."
             : "🌙 Night falls… the vote was tied — nobody was eliminated.";
 
         ChatMessage::create([
             'game_id'     => $game->id,
-            'player_id'   => $game->players->first()->id,
+            'player_id'   => null,  // system message — no real player
             'player_name' => '📢 Game',
             'channel'     => 'day', // day channel so everyone sees the outcome
-            'round'       => $game->round,
+            'round'       => $currentRound,  // the round just resolved, not the new one
             'message'     => $msg,
         ]);
+
+        if ($game->checkWinner()) {
+            $game->update(['status' => 'finished', 'phase_ends_at' => null]);
+            return;
+        }
 
         $this->resolveBotNightActions($game);
     }
@@ -874,11 +896,6 @@ class GameController extends Controller
             $target = $targets->random();
             $bot->update(['day_vote_target_id' => $target->id]);
         }
-    }
-
-    private function resolveBotActions(Game $game): void
-    {
-        // Nothing needed at roles_assigned phase
     }
 
     // ── Show / legacy ─────────────────────────────────────────────────────────

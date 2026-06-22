@@ -94,11 +94,10 @@
                 <div class="game-row-meta">{{ $game->players_count }} players</div>
                 @php
                     $badgeClass = match($game->status) {
-                        'waiting'        => 'badge-waiting',
-                        'roles_assigned' => 'badge-assigned',
-                        'in_progress'    => 'badge-progress',
-                        'finished'       => 'badge-finished',
-                        default          => 'badge-waiting',
+                        'waiting'     => 'badge-waiting',
+                        'in_progress' => 'badge-progress',
+                        'finished'    => 'badge-finished',
+                        default       => 'badge-waiting',
                     };
                 @endphp
                 <span class="badge {{ $badgeClass }}">{{ $game->status_label }}</span>

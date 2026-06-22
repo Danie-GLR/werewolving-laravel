@@ -207,7 +207,7 @@
 <div class="lobby-hero">
     <div class="lobby-hint">Share this page URL with your players</div>
     <div class="lobby-game-name">{{ $game->name }}</div>
-    <span class="status-pill {{ $game->status === 'waiting' ? 'pill-waiting' : ($game->status === 'roles_assigned' ? 'pill-assigned' : 'pill-progress') }}">
+    <span class="status-pill {{ $game->status === 'waiting' ? 'pill-waiting' : 'pill-progress' }}">
         {{ $game->status_label }}
     </span>
 </div>
@@ -244,7 +244,7 @@
 @endif
 
 {{-- Roles assigned --}}
-@if($myPlayer && in_array($game->status, ['roles_assigned', 'in_progress']))
+@if($myPlayer && $game->status === 'in_progress')
 <div class="lobby-card" style="text-align:center;">
     <span class="status-icon">🎭</span>
     <h2 style="justify-content:center; margin-bottom:.75rem;">Roles are ready!</h2>
@@ -351,18 +351,7 @@
         </div>
     @endif
 
-    @if($game->status === 'roles_assigned')
-        <p style="color:var(--green); font-size:.9rem; font-weight:700;">✅ Roles assigned — players can now see their role.</p>
-        <div class="btn-row">
-            <form method="POST" action="{{ route('games.assign-roles', $game) }}">
-                @csrf
-                <button type="submit" class="btn-outline">🔄 Re-assign Roles</button>
-            </form>
-            <form method="POST" action="{{ route('games.start', $game) }}">
-                @csrf
-                <button type="submit" class="btn-green">▶ Start Game</button>
-            </form>
-        </div>
+    @if(false) {{-- roles_assigned status removed; game now starts immediately on role assignment --}}
     @endif
 
     @if($game->status === 'in_progress')

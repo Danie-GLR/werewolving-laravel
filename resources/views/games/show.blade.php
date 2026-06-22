@@ -60,11 +60,10 @@
         <div class="flex mt-1">
             @php
                 $badgeClass = match($game->status) {
-                    'waiting'        => 'badge-waiting',
-                    'roles_assigned' => 'badge-assigned',
-                    'in_progress'    => 'badge-progress',
-                    'finished'       => 'badge-finished',
-                    default          => 'badge-waiting',
+                    'waiting'     => 'badge-waiting',
+                    'in_progress' => 'badge-progress',
+                    'finished'    => 'badge-finished',
+                    default       => 'badge-waiting',
                 };
             @endphp
             <span class="badge {{ $badgeClass }}">{{ $game->status_label }}</span>
@@ -83,16 +82,7 @@
                 </form>
             @endif
 
-            @if($game->status === 'roles_assigned')
-                <form method="POST" action="{{ route('games.assign-roles', $game) }}">
-                    @csrf
-                    <button type="submit" class="btn-outline">🔄 Re-assign</button>
-                </form>
-                <form method="POST" action="{{ route('games.start', $game) }}">
-                    @csrf
-                    <button type="submit" class="btn-green">▶ Start Game</button>
-                </form>
-            @endif
+{{-- roles_assigned status removed; game starts immediately on role assignment --}}
         @endif
 
         @if(in_array($game->status, ['in_progress', 'finished']))

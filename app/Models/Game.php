@@ -25,9 +25,9 @@ class Game extends Model
     public function getStatusLabelAttribute(): string
     {
         return match ($this->status) {
-            'waiting'     => '⏳ Waiting',
-            'in_progress' => '🐺 In Progress',
-            'finished'    => '✅ Finished',
+            'waiting'     => ' Waiting',
+            'in_progress' => ' In Progress',
+            'finished'    => 'Finished',
             default       => ucfirst($this->status),
         };
     }

@@ -746,8 +746,8 @@ class GameController extends Controller
         // Write a day-channel system message announcing the night result (always,
         // even on the game-ending round so players see the outcome).
         $msg = $killed
-            ? "☀️ Day breaks… **{$killed->name}** was killed in the night."
-            : "☀️ Day breaks… nobody died! (Doctor saved someone)";
+            ? " Day breaks… **{$killed->name}** was killed in the night."
+            : " Day breaks… nobody died! (Doctor saved someone)";
 
         ChatMessage::create([
             'game_id'     => $game->id,
@@ -824,8 +824,8 @@ class GameController extends Controller
         // Write a day-channel system message announcing the day result (always,
         // even on the game-ending round so players see who was eliminated).
         $msg = $eliminated
-            ? "🌙 Night falls… **{$eliminated->name}** was eliminated by the village."
-            : "🌙 Night falls… the vote was tied — nobody was eliminated.";
+            ? " Night falls… **{$eliminated->name}** was eliminated by the village."
+            : " Night falls… the vote was tied — nobody was eliminated.";
 
         ChatMessage::create([
             'game_id'     => $game->id,

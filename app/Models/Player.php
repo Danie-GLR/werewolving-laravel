@@ -29,10 +29,10 @@ class Player extends Model
     public function getRoleIconAttribute(): string
     {
         return match ($this->role) {
-            'Werewolf' => '🐺',
-            'Seer'     => '🔮',
-            'Doctor'   => '💊',
-            'Villager' => '👨‍🌾',
+            'Werewolf' => '',
+            'Seer'     => '',
+            'Doctor'   => '',
+            'Villager' => '',
             default    => '❓',
         };
     }
